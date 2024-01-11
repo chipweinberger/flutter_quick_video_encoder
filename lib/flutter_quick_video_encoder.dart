@@ -17,7 +17,7 @@ class FlutterQuickVideoEncoder {
     return await _invokeMethod('setLogLevel', {'log_level': level.index});
   }
 
-  /// setup audio
+  /// setup encoder
   static Future<void> setup(
       {required int width,
       required int height,
