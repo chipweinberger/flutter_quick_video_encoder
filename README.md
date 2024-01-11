@@ -4,40 +4,35 @@
     <img alt="Logo" src="https://github.com/chipweinberger/flutter_quick_video_encoder/blob/master/site/logo.png?raw=true" style="height: 300px;" />
 </p>
 
-Encode rgb images & pcm audio to a mp4 video, using system video encoders.
+Quickly encode raw RGB images & PCM audio to MP4 video using the system h264 encoder
 
 ## No Dependencies
 
 FlutterQuickVideoEncoder has zero dependencies besides Flutter, Android, iOS, and MacOS themselves.
 
-## Usage
-
-```dart
-await FlutterQuickVideoEncoder.setup(sampleRate: 44100, channelCount: 1);
-await FlutterQuickVideoEncoder.setFeedThreshold(8000); // feed when below 8000 queued frames
-await FlutterQuickVideoEncoder.setFeedCallback(onFeed);
-await FlutterQuickVideoEncoder.play();
-```
-
-## Other Functions
-
-```dart
-// suspend playback but does *not* clear queued samples
-await FlutterQuickVideoEncoder.pause();
-
-// clears all queued samples
-await FlutterQuickVideoEncoder.clear();
-
-// suspend playback & clear queued samples
-await FlutterQuickVideoEncoder.stop();
-
-// get the current number of queued frames
-int samples = await FlutterQuickVideoEncoder.remainingFrames();
-```
-
 ## ⭐ Stars ⭐
 
 Please star this repo & on [pub.dev](https://pub.dev/packages/flutter_quick_video_encoder). We all benefit from having a larger community.
+
+## Usage
+
+```dart
+await FlutterQuickVideoEncoder.setup(
+    width: 1920,
+    height: 1080,
+    fps: 60,
+    bitrate: 2500000,
+    sampleRate: 44100,
+    filepath: "/documents/video.mp4",
+);
+for(int i = 0; i < frameCount; i++) {
+    Uint8List rgba = _renderVideoFrame(i);  // your video function
+    Uint8List pcm = _renderAudioSamples(i); // your audio function
+    await FlutterQuickVideoEncoder.appendVideoFrame(rgba); 
+    await FlutterQuickVideoEncoder.appendAudioSamples(pcm);
+}
+await FlutterQuickVideoEncoder.finish();
+```
 
 ## Example App
 
