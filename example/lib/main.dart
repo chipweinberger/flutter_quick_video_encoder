@@ -103,7 +103,7 @@ class _FqveAppState extends State<FqveApp> {
         filepath: filepath,
       );
 
-      int totalFrames = 300;
+      int totalFrames = 120;
       for (int i = 0; i < totalFrames; i++) {
         Uint8List frameData = _generateFrameData(i);
         await FlutterQuickVideoEncoder.appendVideoFrame(frameData);
@@ -152,8 +152,14 @@ class _FqveAppState extends State<FqveApp> {
                         onPressed: exportVideo,
                         child: Text('Export Test Video'),
                       ),
-                      LinearProgressIndicator(
-                        value: progress,
+                      Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Opacity(
+                          opacity: progress > 0 ? 1 : 0,
+                          child: LinearProgressIndicator(
+                            value: progress,
+                          ),
+                        ),
                       ),
                     ],
                   ),

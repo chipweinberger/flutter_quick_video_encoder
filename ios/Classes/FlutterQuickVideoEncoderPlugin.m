@@ -203,6 +203,12 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 return;
             }
 
+            // wait until ready
+            while (self.mVideoInput.readyForMoreMediaData == FALSE) {
+                NSDate *maxDate = [NSDate dateWithTimeIntervalSinceNow:0.1];
+                [[NSRunLoop currentRunLoop] runUntilDate:maxDate];
+            }
+
             // Append the sample buffer
             if (![self.mVideoInput appendSampleBuffer:sampleBuffer]) {
                 NSError *error = self.mAssetWriter.error;
@@ -258,6 +264,12 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                                         message:@"Failed to create audio sample buffer"
                                         details:nil]);
                 return;
+            }
+
+            // wait until ready
+            while (self.mAudioInput.readyForMoreMediaData == FALSE) {
+                NSDate *maxDate = [NSDate dateWithTimeIntervalSinceNow:0.1];
+                [[NSRunLoop currentRunLoop] runUntilDate:maxDate];
             }
 
             // Append the sample buffer
