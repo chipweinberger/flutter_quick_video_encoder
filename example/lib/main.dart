@@ -30,6 +30,8 @@ class _FqveAppState extends State<FqveApp> {
   static const int fps = 60;
   static const int sampleRate = 44100;
 
+  BuildContext? _context;
+
   @override
   void initState() {
     super.initState();
@@ -65,8 +67,8 @@ class _FqveAppState extends State<FqveApp> {
 
   // generate audio data
   Uint8List _generateAudioData(int frameIndex) {
-    const double htz = 220.0;  // sine wave htz
-    const int samplesPerFrame = sampleRate ~/ fps; 
+    const double htz = 220.0; // sine wave htz
+    const int samplesPerFrame = sampleRate ~/ fps;
 
     // Calculate the phase shift for this frame to maintain continuity
     double phaseShift = 2 * pi * htz * frameIndex / 60;
@@ -89,7 +91,6 @@ class _FqveAppState extends State<FqveApp> {
 
   Future<void> exportVideo() async {
     try {
-
       Directory appDir = await getApplicationDocumentsDirectory();
       var filepath = "${appDir.path}/exportedVideo.mp4";
 
@@ -104,9 +105,9 @@ class _FqveAppState extends State<FqveApp> {
 
       int totalFrames = 300;
       for (int i = 0; i < totalFrames; i++) {
-        Uint8List frameData = _generateFrameData(i); 
+        Uint8List frameData = _generateFrameData(i);
         await FlutterQuickVideoEncoder.appendVideoFrame(frameData);
-        Uint8List audioData = _generateAudioData(i); 
+        Uint8List audioData = _generateAudioData(i);
         await FlutterQuickVideoEncoder.appendAudioSamples(audioData);
         setState(() {
           progress = (i + 1) / totalFrames;
@@ -121,36 +122,45 @@ class _FqveAppState extends State<FqveApp> {
   }
 
   void showSnackBar(String message) {
+    print(message);
     final snackBar = SnackBar(content: Text(message));
-    ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    if (_context != null && _context!.mounted) {
+      ScaffoldMessenger.of(_context!).showSnackBar(snackBar);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: Scaffold(
-        appBar: AppBar(
-          centerTitle: true,
-          title: Text('Flutter Quick Video Encoder'),
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
         ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              ElevatedButton(
-                onPressed: exportVideo,
-                child: Text('Export Test Video'),
-              ),
-              LinearProgressIndicator(
-                value: progress,
-              ),
-            ],
+        home: ScaffoldMessenger(
+          child: Builder(
+            builder: (context) {
+              _context = context;
+              return Scaffold(
+                appBar: AppBar(
+                  centerTitle: true,
+                  title: Text('Flutter Quick Video Encoder'),
+                ),
+                body: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton(
+                        onPressed: exportVideo,
+                        child: Text('Export Test Video'),
+                      ),
+                      LinearProgressIndicator(
+                        value: progress,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
           ),
-        ),
-      ),
-    );
+        ));
   }
 }
