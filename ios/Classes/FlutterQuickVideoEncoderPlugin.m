@@ -62,160 +62,232 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         else if ([@"setup" isEqualToString:call.method])
         {
             NSDictionary *args = (NSDictionary*)call.arguments;
-            NSNumber *sampleRate  = args[@"sample_rate"];
 
-            //
-            // output file
-            // 
+            // Extract parameters from 'args'
+            NSNumber *width = args[@"width"];
+            NSNumber *height = args[@"height"];
+            NSNumber *fps = args[@"fps"];
+            NSNumber *bitrate = args[@"bitrate"];
+            NSNumber *sampleRate = args[@"sampleRate"];
+            NSString *filepath = args[@"filepath"];
 
             NSError *error = nil;
     
-            // AVAssetWriter will not write over an existing file.
-            [[NSFileManager defaultManager] removeItemAtURL:self.URL error:NULL];
+            // Output file URL
+            NSURL *fileURL = [NSURL fileURLWithPath:filepath];
 
-            //
-            // writer
-            //
+            // Check if file already exists at URL, we must delete it
+            if ([[NSFileManager defaultManager] fileExistsAtPath:[fileURL path]]) {
+                [[NSFileManager defaultManager] removeItemAtURL:fileURL error:&error];
+                if (error) {
+                    result([FlutterError errorWithCode:@"FileRemoveError" 
+                                            message:@"Unable to remove existing file" 
+                                            details:[error localizedDescription]]);
+                    return;
+                }
+            }
+
+            // Initialize AVAssetWriter with the file URL
+            self.mAssetWriter = [[AVAssetWriter alloc] initWithURL:fileURL
+                                                         fileType:AVFileTypeQuickTimeMovie
+                                                            error:&error];
             
-            mAssetWriter = [[AVAssetWriter alloc] initWithURL:self.URL
-                                                    fileType:AVFileTypeQuickTimeMovie
-                                                        error:&error];
-            
-            // Create and add inputs
             if (error) {
-                return NULL;
+                result([FlutterError errorWithCode:@"AVAssetWriterInitializationError" 
+                                           message:[error localizedDescription] 
+                                           details:nil]);
+                return;
             }
-            
-            //
-            // video
-            // 
-            
-            NSDictionary *compressionProperties = @{AVVideoAverageBitRateKey : @(1.05)};
 
+            // Video settings
+            NSDictionary *compressionProperties = @{AVVideoAverageBitRateKey : bitrate};
             NSDictionary *videoSettings = @{AVVideoCodecKey : AVVideoCodecTypeH264,
-                                            AVVideoWidthKey : @(width),
-                                            AVVideoHeightKey : @(height),
+                                            AVVideoWidthKey : width,
+                                            AVVideoHeightKey : height,
                                             AVVideoCompressionPropertiesKey : compressionProperties};
-            
-            if (false == [mAssetWriter canApplyOutputSettings:videoSettings
-                                                forMediaType:AVMediaTypeVideo]) {
-                return NULL;
-            }
-            
-            mVideoInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeVideo
-                                                        outputSettings:videoSettings
-                                                    sourceFormatHint:NULL];
-            
-            mVideoInput.expectsMediaDataInRealTime = YES;
-            
-            if (false == [mAssetWriter canAddInput:mVideoInput]) {
-                return NULL;
-            }
-            
-            [mAssetWriter addInput:mVideoInput];
-            
-            //
-            // audio
-            // 
 
-            AudioChannelLayout monoLayout = {
-                .mChannelLayoutTag = kAudioChannelLayoutTag_Mono,
-                .mChannelBitmap = 0,
-                .mNumberChannelDescriptions = 0,
-            };
-            
-            NSData *monoLayoutData = [NSData dataWithBytes:&monoLayout
-                                                length:offsetof(AudioChannelLayout, mChannelDescriptions)];
+            // Initialize video input
+            self.mVideoInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeVideo
+                                                            outputSettings:videoSettings];
+            self.mVideoInput.expectsMediaDataInRealTime = YES;
 
+            // Add video input to asset writer
+            if (![self.mAssetWriter canAddInput:self.mVideoInput]) {
+                result([FlutterError errorWithCode:@"VideoInputAdditionError" 
+                                           message:@"Unable to add video input to AVAssetWriter" 
+                                           details:nil]);
+                return;
+            }
+            [self.mAssetWriter addInput:self.mVideoInput];
+
+            // Audio settings
+            // Adjust audio settings as needed
             NSDictionary* audioSettings = @{AVFormatIDKey : @(kAudioFormatMPEG4AAC),
-                                            AVSampleRateKey:@44100,
-                                            AVChannelLayoutKey:monoLayoutData,
+                                            AVSampleRateKey : sampleRate,
                                             AVNumberOfChannelsKey: @1};
 
-            if ( false == [mAssetWriter canApplyOutputSettings:audioSettings
-                                                forMediaType:AVMediaTypeAudio] ) {
-                return NULL;
-            }
-            
-            mAudioInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio
-                                                        outputSettings:audioSettings
-                                                    sourceFormatHint:NULL];
-            
-            
-            mAudioInput.expectsMediaDataInRealTime = NO;
-            
-            if (false == [mAssetWriter canAddInput:mAudioInput])
-            {
-                return NULL;
-            }
-            
-            [mAssetWriter addInput:mAudioInput];
+            // Initialize audio input
+            self.mAudioInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio
+                                                            outputSettings:audioSettings];
+            self.mAudioInput.expectsMediaDataInRealTime = NO;
 
-            
-            BOOL success = [mAssetWriter startWriting];
-            
-            if (!success) {
-                //error = mAssetWriter.error;
-                return NULL;
+            // Add audio input to asset writer
+            if (![self.mAssetWriter canAddInput:self.mAudioInput]) {
+                result([FlutterError errorWithCode:@"AudioInputAdditionError" 
+                                           message:@"Unable to add audio input to AVAssetWriter" 
+                                           details:nil]);
+                return;
             }
-            
-            return self;
+            [self.mAssetWriter addInput:self.mAudioInput];
 
             result(@(true));
         }
         else if ([@"appendVideoFrame" isEqualToString:call.method])
         {
             NSDictionary *args = (NSDictionary*)call.arguments;
-            NSNumber *sampleRate  = args[@"sample_rate"];
+            FlutterStandardTypedData *rawRgbaData = args[@"rawRgba"];
+            NSData *videoFrameData = rawRgbaData.data;
 
-            if (NO == _haveStartedSession) {
-                CMTime tStart = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
-                [mAssetWriter startSessionAtSourceTime:tStart];
-                _haveStartedSession = YES;
-                NSLog(@"_haveStartedSession = YES");
+            // Check if the asset writer is initialized
+            if (!self.mAssetWriter) {
+                result([FlutterError errorWithCode:@"AssetWriterUnavailable"
+                                        message:@"AVAssetWriter is not initialized"
+                                        details:nil]);
+                return;
             }
-            
-            // todo: instead of sleeping, use: requestMediaDataWhenReadyOnQueue:mediaInputQueue
-            while (mVideoInput.readyForMoreMediaData == FALSE) {
-                [NSThread sleepForTimeInterval:0.1];
+
+            // Check if video input is ready
+            if (!self.mVideoInput) {
+                result([FlutterError errorWithCode:@"AVAssetWriterInputUnavailable"
+                                        message:@"AVAssetWriterInput is not initialized"
+                                        details:nil]);
+                return;
             }
-            
-            if (NO == [mVideoInput appendSampleBuffer:sampleBuffer]) {
-                *error = mAssetWriter.error;
+
+            // Ensure that we have started the session
+            if (!self.mAssetWriter.status == AVAssetWriterStatusWriting) {
+                [self.mAssetWriter startWriting];
+                [self.mAssetWriter startSessionAtSourceTime:kCMTimeZero];
             }
+
+            // Create video sample buffer from the provided data
+            CMSampleBufferRef sampleBuffer = NULL;
+            sampleBuffer = [self createVideoSampleBufferWithWidth:[width intValue] 
+                                                        height:[height intValue] 
+                                                            data:videoFrameData];
+
+            if (!sampleBuffer) {
+                result([FlutterError errorWithCode:@"SampleBufferCreationFailed"
+                                        message:@"Failed to create video sample buffer"
+                                        details:nil]);
+                return;
+            }
+
+            // Append the sample buffer
+            if (![self.mVideoInput appendSampleBuffer:sampleBuffer]) {
+                NSError *error = self.mAssetWriter.error;
+                NSString *errorDetails = error ? [error localizedDescription] : @"Unknown error";
+                result([FlutterError errorWithCode:@"SampleBufferAppendFailed"
+                                        message:@"Failed to append video sample buffer"
+                                        details:errorDetails]);
+                CFRelease(sampleBuffer);
+                return;
+            }
+
+            // Release the sample buffer
+            CFRelease(sampleBuffer);
 
             result(@(true));
         }
         else if ([@"appendAudioSamples" isEqualToString:call.method])
         {
+            NSDictionary *args = (NSDictionary*)call.arguments;
+            FlutterStandardTypedData *rawPcmData = args[@"rawPcm"];
+            NSData *audioSampleData = rawPcmData.data;
 
-            if (NO == _haveStartedSession) {
-                CMTime tStart = CMSampleBufferGetPresentationTimeStamp(sampleBuffer);
-                [mAssetWriter startSessionAtSourceTime:tStart];
-                _haveStartedSession = YES;
-            }
-            
-            while (mAudioInput.readyForMoreMediaData == FALSE) {
-                NSLog(@"audio sleep");
-                [NSThread sleepForTimeInterval:0.1];
+            // Check if the asset writer is initialized
+            if (!self.mAssetWriter) {
+                result([FlutterError errorWithCode:@"AssetWriterUnavailable"
+                                        message:@"AVAssetWriter is not initialized"
+                                        details:nil]);
+                return;
             }
 
-            if (NO == [mAudioInput appendSampleBuffer:sampleBuffer]) {
-                *error = mAssetWriter.error;
+            // Check if the audio input is initialized
+            if (!self.mAssetWriter || !self.mAudioInput) {
+                result([FlutterError errorWithCode:@"AVAssetWriterInputUnavailable"
+                                        message:@"AVAssetWriterInput is not initialized"
+                                        details:nil]);
+                return;
             }
+
+            // Ensure that we have started the session
+            if (!self.mAssetWriter.status == AVAssetWriterStatusWriting) {
+                [self.mAssetWriter startWriting];
+                [self.mAssetWriter startSessionAtSourceTime:kCMTimeZero];
+            }
+
+            // Create audio sample buffer from the provided data
+            CMSampleBufferRef sampleBuffer = NULL;
+            sampleBuffer = [self createAudioSampleBufferWithData:audioSampleData sampleRate:[sampleRate intValue]];
+
+            if (!sampleBuffer) {
+                result([FlutterError errorWithCode:@"SampleBufferCreationFailed"
+                                        message:@"Failed to create audio sample buffer"
+                                        details:nil]);
+                return;
+            }
+
+            // Append the sample buffer
+            if (![self.mAudioInput appendSampleBuffer:sampleBuffer]) {
+                NSError *error = self.mAssetWriter.error;
+                NSString *errorDetails = error ? [error localizedDescription] : @"Unknown error";
+                result([FlutterError errorWithCode:@"SampleBufferAppendFailed"
+                                        message:@"Failed to append audio sample buffer"
+                                        details:errorDetails]);
+                CFRelease(sampleBuffer);
+                return;
+            }
+
+            // Release the sample buffer
+            CFRelease(sampleBuffer);
 
             result(@(true));
         }
         else if ([@"finish" isEqualToString:call.method])
         {
-            [mAudioInput markAsFinished];
-            [mVideoInput markAsFinished];
-            [mAssetWriter finishWritingWithCompletionHandler:^{
-                ... need to wait until this finishes before we return ....
+            // Check if the asset writer is initialized
+            if (!self.mAssetWriter) {
+                result([FlutterError errorWithCode:@"AssetWriterUnavailable"
+                                        message:@"AVAssetWriter is not initialized"
+                                        details:nil]);
+                return;
+            }
+
+            // Mark the inputs as finished
+            [self.mAudioInput markAsFinished];
+            [self.mVideoInput markAsFinished];
+
+            // Setup a dispatch group to wait for the finishWriting completion
+            dispatch_group_t dispatchGroup = dispatch_group_create();
+            dispatch_group_enter(dispatchGroup);
+
+            [self.mAssetWriter finishWritingWithCompletionHandler:^{
+                // This block is executed when writing is finished
+                dispatch_group_leave(dispatchGroup);
             }];
 
-            while (...not done?....) {
-                [NSThread sleepForTimeInterval:0.1];
+            // Wait for the completion handler to finish
+            dispatch_group_wait(dispatchGroup, DISPATCH_TIME_FOREVER);
+
+            // After writing is complete, check for any errors
+            if (self.mAssetWriter.status == AVAssetWriterStatusFailed) {
+                NSError *error = self.mAssetWriter.error;
+                NSString *errorDetails = error ? [error localizedDescription] : @"Unknown error";
+                result([FlutterError errorWithCode:@"AssetWriterFinishFailed"
+                                        message:@"Failed to finish writing"
+                                        details:errorDetails]);
+                return;
             }
 
             result(@(true));
@@ -235,144 +307,151 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 @end
 
 
-
-CMSampleBufferRef createVideoSampleBuffer(int width, int height, int frame, int fps, ...data...) {
-    
+CMSampleBufferRef createVideoSampleBuffer(int width, int height, CMTime frameTime, NSData *videoFrameData)
+{
     CVPixelBufferRef pixelBuffer = NULL;
-    
     CVReturn cvReturn = CVPixelBufferCreate(
-                            CFAllocatorGetDefault(),
+                            kCFAllocatorDefault,
                             width,
                             height,
-                            kCVPixelFormatType_32RGBA,
+                            kCVPixelFormatType_32BGRA,
                             NULL, // cvPixelBufferAtttributes
                             &pixelBuffer);
     
-    XCTAssertTrue(cvReturn == noErr);
+    if (cvReturn != kCVReturnSuccess) {
+        NSLog(@"Failed to create pixel buffer: %d", cvReturn);
+        return NULL;
+    }
     
     CVPixelBufferLockBaseAddress(pixelBuffer, 0);
     
-    uint8_t* baseAddr = (uint8_t*) CVPixelBufferGetBaseAddress(pixelBuffer);
-    
-    // copy data 
-    for (int j = 0; j < width * height * 3; j++) {
-        baseAddr[j] = ......
-    }
+    void *baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer);
+    memcpy(baseAddress, [videoFrameData bytes], [videoFrameData length]);
     
     CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
 
-    
-    CMVideoFormatDescriptionRef formatDesc;
-    
+    CMVideoFormatDescriptionRef formatDescription;
     OSStatus status = CMVideoFormatDescriptionCreateForImageBuffer(
                             kCFAllocatorDefault,
                             pixelBuffer,
-                            &formatDesc);
+                            &formatDescription);
     
-    XCTAssertTrue(status == noErr);
-    
+    if (status != noErr) {
+        NSLog(@"Failed to create format description: %d", status);
+        CVPixelBufferRelease(pixelBuffer);
+        return NULL;
+    }
+
     CMSampleTimingInfo timingInfo = {0};
-    timingInfo.duration = kCMTimeInvalid;//CMTimeMake(1, fps);//kCMTimeInvalid;
+    timingInfo.duration = CMTimeMake(1, 600); // Sample duration
     timingInfo.decodeTimeStamp = kCMTimeInvalid;
-    timingInfo.presentationTimeStamp = CMTimeMake(frame, fps);
+    timingInfo.presentationTimeStamp = frameTime;
     
-    CMSampleBufferRef sampleBuffer;
-    
+    CMSampleBufferRef sampleBuffer = NULL;
+
     status = CMSampleBufferCreateForImageBuffer(
                           kCFAllocatorDefault, // allocator
                           pixelBuffer, // cvImage
                           true, // dataReady
                           NULL, // makeDataReadyCallback
                           NULL, // makeDataReadyRefContext
-                          formatDesc, // formatDescription
+                          formatDescription, // formatDescription
                           &timingInfo, // sampleTiming
                           &sampleBuffer ); // out
     
-    XCTAssertTrue(status == noErr);
+    if (status != noErr) {
+        NSLog(@"Failed to create sample buffer: %d", status);
+        CVPixelBufferRelease(pixelBuffer);
+        CMFormatDescriptionRelease(formatDescription);
+        return NULL;
+    }
+
+    CVPixelBufferRelease(pixelBuffer);
+    CMFormatDescriptionRelease(formatDescription);
     
     return sampleBuffer;
 }
 
-CMSampleBufferRef createAudioSampleBuffer(int iFrame, int sampleRate, int fps, ...data...) {
-    
-    int numSamples = 44100 / fps;
-    int dataLen = numSamples * sizeof(int16_t);
-    int16_t* samples = malloc(dataLen);
-    
-    XCTAssertTrue(samples != NULL);
-    
-    // copy data
-    for(int i = 0; i < numSamples; i++) {
-        samples[i] = ....
-    }
-    
-    CMBlockBufferRef tmpBlock = NULL;
-    OSStatus status = CMBlockBufferCreateWithMemoryBlock(
-                         kCFAllocatorDefault, // allocator
-                         samples, // memoryBlock
-                         dataLen, // blockLength
-                         kCFAllocatorNull, // fallback allocator (if data is NULL)
-                         NULL, // customBlockSource
-                         0, // offsetToData
-                         dataLen, // dataLength
-                         0, // flags
-                         &tmpBlock);
 
-    XCTAssertTrue(status == noErr);
-    
-    CMBlockBufferRef block = tmpBlock;
-    
-    AudioStreamBasicDescription basicDesc = {
-        .mSampleRate = 44100,
+CMSampleBufferRef createAudioSampleBuffer(NSData *audioSampleData, int sampleRate)
+{
+    int numSamples = (int)[audioSampleData length] / sizeof(int16_t);
+
+    CMBlockBufferRef blockBuffer = NULL;
+    OSStatus status = CMBlockBufferCreateWithMemoryBlock(
+                         kCFAllocatorDefault,
+                         (void *)[audioSampleData bytes],
+                         [audioSampleData length],
+                         kCFAllocatorNull,
+                         NULL,
+                         0,
+                         [audioSampleData length],
+                         0,
+                         &blockBuffer);
+
+    if (status != kCMBlockBufferNoErr) {
+        NSLog(@"Failed to create block buffer: %d", status);
+        return NULL;
+    }
+
+    AudioStreamBasicDescription audioFormatDescription = {
+        .mSampleRate = sampleRate,
         .mFormatID = kAudioFormatLinearPCM,
-        .mFormatFlags = kAudioFormatFlagIsPacked | kAudioFormatFlagIsSignedInteger,
-        .mBytesPerFrame = 2,
-        .mFramesPerPacket = 1,
+        .mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked,
         .mBytesPerPacket = 2,
+        .mFramesPerPacket = 1,
+        .mBytesPerFrame = 2,
         .mChannelsPerFrame = 1,
         .mBitsPerChannel = 16,
-        .mReserved = 0,
+        .mReserved = 0
     };
-    
-    CMAudioFormatDescriptionRef audioFormatDesc;
-    
+
+    CMAudioFormatDescriptionRef formatDescription = NULL;
+
     status = CMAudioFormatDescriptionCreate(
                 kCFAllocatorDefault,
-                &basicDesc,
+                &audioFormatDescription,
                 0, // layout num
                 NULL, // speaker location layout
                 0, // format's magic cookie size
                 NULL, // format's magic cookie
                 NULL, // extensions
-                &audioFormatDesc);
-    
-    
-    XCTAssertTrue(status == noErr);
-    
-    CMSampleBufferRef sampleBuffer;
-    
-    CMSampleTimingInfo* timingInfo = calloc(sizeof(CMSampleTimingInfo), 1);
-    timingInfo[0].duration = kCMTimeInvalid;//CMTimeMake(1, fps);
-    timingInfo[0].decodeTimeStamp = kCMTimeInvalid;
-    timingInfo[0].presentationTimeStamp = CMTimeMake(iFrame, fps);
-    
-    size_t* sampleSizeArray = calloc(sizeof(size_t), 1);
-    sampleSizeArray[0] = dataLen;
-    
+                &formatDescription);
+
+    if (status != noErr) {
+        NSLog(@"Failed to create audio format description: %d", status);
+        CFRelease(blockBuffer);
+        return NULL;
+    }
+
+    CMSampleTimingInfo timingInfo = {
+        .duration = CMTimeMake(1, sampleRate),
+        .decodeTimeStamp = kCMTimeInvalid,
+        .presentationTimeStamp = CMTimeMake(0, sampleRate)
+    };
+
     status = CMSampleBufferCreate(kCFAllocatorDefault,// allocator
                          block, // dataBuffer
                          TRUE, // dataReady
                          NULL, // dataReadyCallback
                          NULL, // makeDataReadyRefContext
-                         audioFormatDesc,
+                         formatDescription,
                          numSamples,
                          1, // numSampleTimingEntries
-                         timingInfo, // timing info
-                         1, // number of samples (frames)
-                         sampleSizeArray, // sizes of each sample (frame)
+                         &timingInfo, // timing info
+                         0, // number of samples (frames)
+                         NULL, // sizes of each sample (frame)
                          &sampleBuffer);
 
-    XCTAssertTrue(status == noErr);
-    
+    if (status != noErr) {
+        NSLog(@"Failed to create sample buffer: %d", status);
+        CFRelease(blockBuffer);
+        CMFormatDescriptionRelease(formatDescription);
+        return NULL;
+    }
+
+    CFRelease(blockBuffer);
+    CMFormatDescriptionRelease(formatDescription);
     return sampleBuffer;
 }
+
