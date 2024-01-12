@@ -1,6 +1,9 @@
 package com.lib.flutter_quick_video_encoder;
 
-
+import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.plugin.common.BinaryMessenger;
+import io.flutter.plugin.common.MethodCall;
+import io.flutter.plugin.common.MethodChannel;
 
 public class FlutterQuickVideoEncoderPlugin implements
     FlutterPlugin,
@@ -20,17 +23,24 @@ public class FlutterQuickVideoEncoderPlugin implements
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
         mMethodChannel.setMethodCallHandler(null);
-        cleanup();
     }
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
         switch (call.method) {
             case "setLogLevel":
+                break;
             case "setup":
-            case "appendVideoFrame":
-            case "appendAudioSamples":
+                break;
+            case "addVideoFrame":
+                break;
+            case "addAudioSamples":
+                break;
             case "finish":
+                break;
+            default:
+                result.notImplemented();
+                break;
         }
     }
 }
