@@ -11,9 +11,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
   flutter_quick_video_encoder:
     path: ../
+  path_provider: ^2.1.1
+  path: ^1.8.3
 
 dev_dependencies:
   flutter_test:
