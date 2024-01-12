@@ -13,6 +13,10 @@
 #define kOutputBus 0
 #define NAMESPACE @"flutter_quick_video_encoder" 
 
+// forward define
+CMSampleBufferRef createAudioSampleBuffer(NSData *audioSampleData, int sampleRate);
+CMSampleBufferRef createVideoSampleBuffer(int width, int height, CMTime frameTime, NSData *videoFrameData);
+
 typedef NS_ENUM(NSUInteger, LogLevel) {
     none = 0,
     error = 1,
@@ -27,6 +31,10 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 @property(nonatomic) AVAssetWriter *mAssetWriter;
 @property(nonatomic) AVAssetWriterInput *mAudioInput;
 @property(nonatomic) AVAssetWriterInput *mVideoInput;
+@property(nonatomic) NSNumber *width;
+@property(nonatomic) NSNumber *height;
+@property(nonatomic) NSNumber *fps;
+@property(nonatomic) NSNumber *sampleRate;
 @end
 
 @implementation FlutterQuickVideoEncoderPlugin
@@ -70,6 +78,12 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             NSNumber *bitrate = args[@"bitrate"];
             NSNumber *sampleRate = args[@"sampleRate"];
             NSString *filepath = args[@"filepath"];
+
+            // remember these
+            self.width = width;
+            self.height = height;
+            self.fps = fps;
+            self.sampleRate = sampleRate;
 
             NSError *error = nil;
     
@@ -172,8 +186,8 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
             // Create video sample buffer from the provided data
             CMSampleBufferRef sampleBuffer = NULL;
-            sampleBuffer = [self createVideoSampleBufferWithWidth:[width intValue] 
-                                                        height:[height intValue] 
+            sampleBuffer = [self createVideoSampleBufferWithWidth:[self.width intValue] 
+                                                        height:[self.height intValue] 
                                                             data:videoFrameData];
 
             if (!sampleBuffer) {
@@ -214,7 +228,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             }
 
             // Check if the audio input is initialized
-            if (!self.mAssetWriter || !self.mAudioInput) {
+            if (!self.mAudioInput) {
                 result([FlutterError errorWithCode:@"AVAssetWriterInputUnavailable"
                                         message:@"AVAssetWriterInput is not initialized"
                                         details:nil]);
@@ -229,7 +243,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
             // Create audio sample buffer from the provided data
             CMSampleBufferRef sampleBuffer = NULL;
-            sampleBuffer = [self createAudioSampleBufferWithData:audioSampleData sampleRate:[sampleRate intValue]];
+            sampleBuffer = [self createAudioSampleBufferWithData:audioSampleData sampleRate:[self.sampleRate intValue]];
 
             if (!sampleBuffer) {
                 result([FlutterError errorWithCode:@"SampleBufferCreationFailed"
@@ -431,7 +445,7 @@ CMSampleBufferRef createAudioSampleBuffer(NSData *audioSampleData, int sampleRat
     };
 
     status = CMSampleBufferCreate(kCFAllocatorDefault,// allocator
-                         block, // dataBuffer
+                         blockBuffer, // dataBuffer
                          TRUE, // dataReady
                          NULL, // dataReadyCallback
                          NULL, // makeDataReadyRefContext
