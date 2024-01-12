@@ -15,6 +15,6 @@ Pod::Spec.new do |s|
   s.public_header_files = 'Classes/**/*.h'
   s.dependency 'Flutter'
   s.platform = :ios, '9.0'
-  s.framework = 'AVFoundation'
+  s.framework = 'AVFoundation', 'CoreMedia'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', }
 end

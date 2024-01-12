@@ -1,12 +1,12 @@
 #import "FlutterQuickVideoEncoderPlugin.h"
 #import <Foundation/Foundation.h>
 
+#import <AVFoundation/AVFoundation.h>
 #import <AVFoundation/AVAssetWriter.h>
 #import <AVFoundation/AVAssetWriterInput.h>
 #import <AVFoundation/AVMediaFormat.h>
-#import <AVFoundation/AVVideoSettings.h>
-#import <AVFoundation/AVAudioSettings.h>
 
+#import <CoreMedia/CoreMedia.h> 
 #import <CoreMedia/CMFormatDescription.h>
 #import <CoreMedia/CMSampleBuffer.h>
 
@@ -14,8 +14,8 @@
 #define NAMESPACE @"flutter_quick_video_encoder" 
 
 // forward define
-CMSampleBufferRef createAudioSampleBuffer(NSData *audioSampleData, int sampleRate);
-CMSampleBufferRef createVideoSampleBuffer(int width, int height, CMTime frameTime, NSData *videoFrameData);
+CMSampleBufferRef createVideoSampleBuffer(int fps, int videoFrameIdx, int width, int height, NSData *videoFrameData);
+CMSampleBufferRef createAudioSampleBuffer(int fps, int audioFrameIdx, int sampleRate, NSData *audioSampleData);
 
 typedef NS_ENUM(NSUInteger, LogLevel) {
     none = 0,
@@ -31,10 +31,13 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 @property(nonatomic) AVAssetWriter *mAssetWriter;
 @property(nonatomic) AVAssetWriterInput *mAudioInput;
 @property(nonatomic) AVAssetWriterInput *mVideoInput;
-@property(nonatomic) NSNumber *width;
-@property(nonatomic) NSNumber *height;
-@property(nonatomic) NSNumber *fps;
-@property(nonatomic) NSNumber *sampleRate;
+@property(nonatomic) int videoFrameIdx;
+@property(nonatomic) int audioFrameIdx;
+@property(nonatomic) int width;
+@property(nonatomic) int height;
+@property(nonatomic) int fps;
+@property(nonatomic) int bitrate;
+@property(nonatomic) int sampleRate;
 @end
 
 @implementation FlutterQuickVideoEncoderPlugin
@@ -72,18 +75,23 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             NSDictionary *args = (NSDictionary*)call.arguments;
 
             // Extract parameters from 'args'
-            NSNumber *width = args[@"width"];
-            NSNumber *height = args[@"height"];
-            NSNumber *fps = args[@"fps"];
-            NSNumber *bitrate = args[@"bitrate"];
-            NSNumber *sampleRate = args[@"sampleRate"];
+            NSNumber *nWidth = args[@"width"];
+            NSNumber *nHeight = args[@"height"];
+            NSNumber *nFps = args[@"fps"];
+            NSNumber *nBitrate = args[@"bitrate"];
+            NSNumber *nSampleRate = args[@"sampleRate"];
             NSString *filepath = args[@"filepath"];
 
             // remember these
-            self.width = width;
-            self.height = height;
-            self.fps = fps;
-            self.sampleRate = sampleRate;
+            self.width =      (int) nWidth.integerValue;
+            self.height =     (int) nHeight.integerValue;
+            self.fps =        (int) nFps.integerValue;
+            self.bitrate =    (int) nBitrate.integerValue;
+            self.sampleRate = (int) nSampleRate.integerValue;
+
+            // reset counters
+            self.videoFrameIdx = 0;
+            self.audioFrameIdx = 0;
 
             NSError *error = nil;
     
@@ -114,10 +122,10 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             }
 
             // Video settings
-            NSDictionary *compressionProperties = @{AVVideoAverageBitRateKey : bitrate};
+            NSDictionary *compressionProperties = @{AVVideoAverageBitRateKey : @(self.bitrate)};
             NSDictionary *videoSettings = @{AVVideoCodecKey : AVVideoCodecTypeH264,
-                                            AVVideoWidthKey : width,
-                                            AVVideoHeightKey : height,
+                                            AVVideoWidthKey : @(self.width),
+                                            AVVideoHeightKey : @(self.height),
                                             AVVideoCompressionPropertiesKey : compressionProperties};
 
             // Initialize video input
@@ -137,7 +145,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             // Audio settings
             // Adjust audio settings as needed
             NSDictionary* audioSettings = @{AVFormatIDKey : @(kAudioFormatMPEG4AAC),
-                                            AVSampleRateKey : sampleRate,
+                                            AVSampleRateKey : @(self.sampleRate),
                                             AVNumberOfChannelsKey: @1};
 
             // Initialize audio input
@@ -179,16 +187,14 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             }
 
             // Ensure that we have started the session
-            if (!self.mAssetWriter.status == AVAssetWriterStatusWriting) {
+            if (self.mAssetWriter.status != AVAssetWriterStatusWriting) {
                 [self.mAssetWriter startWriting];
                 [self.mAssetWriter startSessionAtSourceTime:kCMTimeZero];
             }
 
             // Create video sample buffer from the provided data
-            CMSampleBufferRef sampleBuffer = NULL;
-            sampleBuffer = [self createVideoSampleBufferWithWidth:[self.width intValue] 
-                                                        height:[self.height intValue] 
-                                                            data:videoFrameData];
+            CMSampleBufferRef sampleBuffer = createVideoSampleBuffer(
+                self.fps, self.videoFrameIdx, self.width, self.height, videoFrameData);
 
             if (!sampleBuffer) {
                 result([FlutterError errorWithCode:@"SampleBufferCreationFailed"
@@ -210,6 +216,9 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
             // Release the sample buffer
             CFRelease(sampleBuffer);
+
+            // increment counter
+            self.videoFrameIdx += 1;
 
             result(@(true));
         }
@@ -236,15 +245,14 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             }
 
             // Ensure that we have started the session
-            if (!self.mAssetWriter.status == AVAssetWriterStatusWriting) {
+            if (self.mAssetWriter.status != AVAssetWriterStatusWriting) {
                 [self.mAssetWriter startWriting];
                 [self.mAssetWriter startSessionAtSourceTime:kCMTimeZero];
             }
 
             // Create audio sample buffer from the provided data
-            CMSampleBufferRef sampleBuffer = NULL;
-            sampleBuffer = [self createAudioSampleBufferWithData:audioSampleData sampleRate:[self.sampleRate intValue]];
-
+            CMSampleBufferRef sampleBuffer = createAudioSampleBuffer(
+                self.fps, self.audioFrameIdx, self.sampleRate, audioSampleData);
             if (!sampleBuffer) {
                 result([FlutterError errorWithCode:@"SampleBufferCreationFailed"
                                         message:@"Failed to create audio sample buffer"
@@ -265,6 +273,9 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
             // Release the sample buffer
             CFRelease(sampleBuffer);
+
+            // increment counter
+            self.audioFrameIdx += 1;
 
             result(@(true));
         }
@@ -321,7 +332,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 @end
 
 
-CMSampleBufferRef createVideoSampleBuffer(int width, int height, CMTime frameTime, NSData *videoFrameData)
+CMSampleBufferRef createVideoSampleBuffer(int fps, int frameIdx, int width, int height, NSData *videoFrameData)
 {
     CVPixelBufferRef pixelBuffer = NULL;
     CVReturn cvReturn = CVPixelBufferCreate(
@@ -357,9 +368,9 @@ CMSampleBufferRef createVideoSampleBuffer(int width, int height, CMTime frameTim
     }
 
     CMSampleTimingInfo timingInfo = {0};
-    timingInfo.duration = CMTimeMake(1, 600); // Sample duration
+    timingInfo.duration = CMTimeMake(1, fps);
     timingInfo.decodeTimeStamp = kCMTimeInvalid;
-    timingInfo.presentationTimeStamp = frameTime;
+    timingInfo.presentationTimeStamp = CMTimeMake(frameIdx, fps);
     
     CMSampleBufferRef sampleBuffer = NULL;
 
@@ -376,18 +387,17 @@ CMSampleBufferRef createVideoSampleBuffer(int width, int height, CMTime frameTim
     if (status != noErr) {
         NSLog(@"Failed to create sample buffer: %d", status);
         CVPixelBufferRelease(pixelBuffer);
-        CMFormatDescriptionRelease(formatDescription);
+        CFRelease(formatDescription);
         return NULL;
     }
 
     CVPixelBufferRelease(pixelBuffer);
-    CMFormatDescriptionRelease(formatDescription);
     
     return sampleBuffer;
 }
 
 
-CMSampleBufferRef createAudioSampleBuffer(NSData *audioSampleData, int sampleRate)
+CMSampleBufferRef createAudioSampleBuffer(int fps, int frameIdx, int sampleRate, NSData *audioSampleData)
 {
     int numSamples = (int)[audioSampleData length] / sizeof(int16_t);
 
@@ -439,10 +449,12 @@ CMSampleBufferRef createAudioSampleBuffer(NSData *audioSampleData, int sampleRat
     }
 
     CMSampleTimingInfo timingInfo = {
-        .duration = CMTimeMake(1, sampleRate),
+        .duration = CMTimeMake(1, fps),
         .decodeTimeStamp = kCMTimeInvalid,
-        .presentationTimeStamp = CMTimeMake(0, sampleRate)
+        .presentationTimeStamp = CMTimeMake(frameIdx, fps),
     };
+
+    CMSampleBufferRef sampleBuffer = NULL;
 
     status = CMSampleBufferCreate(kCFAllocatorDefault,// allocator
                          blockBuffer, // dataBuffer
@@ -460,12 +472,11 @@ CMSampleBufferRef createAudioSampleBuffer(NSData *audioSampleData, int sampleRat
     if (status != noErr) {
         NSLog(@"Failed to create sample buffer: %d", status);
         CFRelease(blockBuffer);
-        CMFormatDescriptionRelease(formatDescription);
+        CFRelease(formatDescription);
         return NULL;
     }
 
     CFRelease(blockBuffer);
-    CMFormatDescriptionRelease(formatDescription);
     return sampleBuffer;
 }
 
