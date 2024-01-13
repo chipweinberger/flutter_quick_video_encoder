@@ -38,8 +38,8 @@ class _FqveAppState extends State<FqveApp> {
     FlutterQuickVideoEncoder.setLogLevel(LogLevel.verbose);
   }
 
-  // generate video data
-  Uint8List _generateFrameData(int frameIndex) {
+  // generate 1 frame of video data
+  Uint8List _generateVideoFrame(int frameIndex) {
     const int boxSize = 50; // Size of the moving box
 
     // Initialize an RGBA buffer
@@ -65,8 +65,8 @@ class _FqveAppState extends State<FqveApp> {
     return Uint8List.view(buffer.buffer);
   }
 
-  // generate audio data
-  Uint8List _generateAudioData(int frameIndex) {
+  // generate 1 frame worth of audio samples
+  Uint8List _generateAudioFrame(int frameIndex) {
     const double htz = 220.0; // sine wave htz
     const int samplesPerFrame = sampleRate ~/ fps;
 
@@ -105,10 +105,10 @@ class _FqveAppState extends State<FqveApp> {
 
       int totalFrames = 120;
       for (int i = 0; i < totalFrames; i++) {
-        Uint8List frameData = _generateFrameData(i);
+        Uint8List frameData = _generateVideoFrame(i);
+        Uint8List audioData = _generateAudioFrame(i);
         await FlutterQuickVideoEncoder.appendVideoFrame(frameData);
-        Uint8List audioData = _generateAudioData(i);
-        await FlutterQuickVideoEncoder.appendAudioSamples(audioData);
+        await FlutterQuickVideoEncoder.appendAudioFrame(audioData);
         setState(() {
           progress = (i + 1) / totalFrames;
         });

@@ -12,6 +12,14 @@ enum LogLevel {
 class FlutterQuickVideoEncoder {
   static const MethodChannel _channel = const MethodChannel('flutter_quick_video_encoder/methods');
 
+  // setup values
+  static int width = 0;
+  static int height = 0;
+  static int fps = 0;
+  static int bitrate = 0;
+  static int sampleRate = 0;
+  static String filepath = "";
+
   /// set log level
   static Future<void> setLogLevel(LogLevel level) async {
     return await _invokeMethod('setLogLevel', {'log_level': level.index});
@@ -25,6 +33,12 @@ class FlutterQuickVideoEncoder {
       required int bitrate,
       required int sampleRate,
       required String filepath}) async {
+    FlutterQuickVideoEncoder.width = width;
+    FlutterQuickVideoEncoder.height = height;
+    FlutterQuickVideoEncoder.fps = fps;
+    FlutterQuickVideoEncoder.bitrate = bitrate;
+    FlutterQuickVideoEncoder.sampleRate = sampleRate;
+    FlutterQuickVideoEncoder.filepath = filepath;
     return await _invokeMethod('setup', {
       'width': width,
       'height': height,
@@ -37,20 +51,29 @@ class FlutterQuickVideoEncoder {
 
   /// append raw rgba video frame, 8 bits per channel
   static Future<void> appendVideoFrame(Uint8List rawRgba) async {
+    assert(rawRgba.length == width * height * 4, "invalid data length");
     return await _invokeMethod('appendVideoFrame', {
       'rawRgba': rawRgba,
     });
   }
 
   /// append raw pcm audio samples
-  static Future<void> appendAudioSamples(Uint8List rawPcm) async {
-    return await _invokeMethod('appendAudioSamples', {
+  static Future<void> appendAudioFrame(Uint8List rawPcm) async {
+    // we only support 16-bit mono audio right now
+    assert(rawPcm.length == sampleRate * 2 / fps, "invalid data length");
+    return await _invokeMethod('appendAudioFrame', {
       'rawPcm': rawPcm,
     });
   }
 
   /// finish writing the video file
   static Future<void> finish() async {
+    FlutterQuickVideoEncoder.width = 0;
+    FlutterQuickVideoEncoder.height = 0;
+    FlutterQuickVideoEncoder.fps = 0;
+    FlutterQuickVideoEncoder.bitrate = 0;
+    FlutterQuickVideoEncoder.sampleRate = 0;
+    FlutterQuickVideoEncoder.filepath = "";
     return await _invokeMethod('finish');
   }
 
@@ -58,4 +81,3 @@ class FlutterQuickVideoEncoder {
     return await _channel.invokeMethod(method, arguments);
   }
 }
-

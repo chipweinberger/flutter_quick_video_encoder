@@ -27,9 +27,9 @@ await FlutterQuickVideoEncoder.setup(
 );
 for(int i = 0; i < frameCount; i++) {
     Uint8List rgba = _renderVideoFrame(i);  // your video function
-    Uint8List pcm = _renderAudioSamples(i); // your audio function
+    Uint8List pcm = _renderAudioFrame(i); // your audio function
     await FlutterQuickVideoEncoder.appendVideoFrame(rgba); 
-    await FlutterQuickVideoEncoder.appendAudioSamples(pcm);
+    await FlutterQuickVideoEncoder.appendAudioFrame(pcm);
 }
 await FlutterQuickVideoEncoder.finish();
 ```

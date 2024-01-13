@@ -228,7 +228,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
             result(@(true));
         }
-        else if ([@"appendAudioSamples" isEqualToString:call.method])
+        else if ([@"appendAudioFrame" isEqualToString:call.method])
         {
             NSDictionary *args = (NSDictionary*)call.arguments;
             FlutterStandardTypedData *rawPcmData = args[@"rawPcm"];
