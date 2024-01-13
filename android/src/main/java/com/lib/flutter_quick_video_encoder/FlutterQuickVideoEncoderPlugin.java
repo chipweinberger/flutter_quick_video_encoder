@@ -24,6 +24,8 @@ public class FlutterQuickVideoEncoderPlugin implements
     private static final String CHANNEL_NAME = "flutter_quick_video_encoder/methods";
 
     private MethodChannel mMethodChannel;
+    private int mWidth;
+    private int mHeight;
     private int mFps;
     private MediaCodec mVideoEncoder;
     private MediaCodec mAudioEncoder;
@@ -66,22 +68,24 @@ public class FlutterQuickVideoEncoderPlugin implements
 
                     // save
                     mFps = fps;
+                    mHeight = height;
+                    mWidth = width;
 
                     // reset
                     mVideoFrameIdx = 0;
                     mAudioFrameIdx = 0;
 
-                    // check video support
-                    int colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface;
+                    // color format
+                    int colorFormat = getColorFormat();
                     if (isColorFormatSupported("video/avc", colorFormat) == false) {
-                        result.error("UnsupportedColorFormat", "RGBA color format is not supported", null);
+                        result.error("UnsupportedColorFormat", "YUV420Planar is not supported", null);
                         return;
                     }
 
                     // check audio support
                     int audioProfile = MediaCodecInfo.CodecProfileLevel.AACObjectLC;
                     if (!isAudioFormatSupported(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioProfile)) {
-                        result.error("UnsupportedAudioFormat", "AAC audio format is not supported", null);
+                        result.error("UnsupportedAudioFormat", "AAC audio is not supported", null);
                         return;
                     }
 
@@ -140,6 +144,9 @@ public class FlutterQuickVideoEncoderPlugin implements
                 {
                     ByteBuffer rawRgba = ((ByteBuffer) call.argument("rawRgba"));
 
+                    // convert to yuv420
+                    byte[] yuv420 = rgbaToYuv420Planar(rawRgba.array(), mWidth, mHeight);
+
                     // time
                     long presentationTime = mVideoFrameIdx * 1000000000L / mFps;
 
@@ -148,8 +155,8 @@ public class FlutterQuickVideoEncoderPlugin implements
                     if (inIdx >= 0) {
                         ByteBuffer buf = mVideoEncoder.getInputBuffer(inIdx);
                         buf.clear();
-                        buf.put(rawRgba);
-                        mVideoEncoder.queueInputBuffer(inIdx, 0, rawRgba.capacity(), presentationTime, 0);
+                        buf.put(yuv420);
+                        mVideoEncoder.queueInputBuffer(inIdx, 0, yuv420.length, presentationTime, 0);
                     }
 
                     // retrieve encoded data & feed muxer
@@ -294,5 +301,46 @@ public class FlutterQuickVideoEncoderPlugin implements
             }
         }
         return null;
+    }
+
+    private byte[] rgbaToYuv420Planar(byte[] rgba, int width, int height) {
+        final int frameSize = width * height;
+
+        int yIndex = 0;
+        int uIndex = frameSize;
+        int vIndex = frameSize + frameSize / 4;
+
+        byte[] yuv420 = new byte[width * height * 3 / 2];
+
+        int r, g, b, y, u, v;
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                r = rgba[j * width * 4 + i * 4] & 0xFF;
+                g = rgba[j * width * 4 + i * 4 + 1] & 0xFF;
+                b = rgba[j * width * 4 + i * 4 + 2] & 0xFF;
+
+                // RGB to YUV formula
+                y = ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16;
+                u = ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128;
+                v = ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128;
+
+                yuv420[yIndex++] = (byte) Math.max(0, Math.min(255, y));
+                if (j % 2 == 0 && i % 2 == 0) {
+                    yuv420[uIndex++] = (byte) Math.max(0, Math.min(255, u));
+                    yuv420[vIndex++] = (byte) Math.max(0, Math.min(255, v));
+                }
+            }
+        }
+
+        return yuv420;
+    }
+
+    @SuppressWarnings({"deprecation"})
+    private int getColorFormat() {
+        if (android.os.Build.VERSION.SDK_INT >= 23) {
+            return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible;
+        } else {
+            return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
+        }
     }
 }
