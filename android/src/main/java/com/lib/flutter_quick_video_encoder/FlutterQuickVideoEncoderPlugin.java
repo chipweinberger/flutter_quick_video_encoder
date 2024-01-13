@@ -1,9 +1,19 @@
 package com.lib.flutter_quick_video_encoder;
 
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
+import android.media.MediaMuxer;
+
+import java.nio.ByteBuffer;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
+
 
 public class FlutterQuickmVideoEncoderPlugin implements
     FlutterPlugin,
@@ -19,6 +29,8 @@ public class FlutterQuickmVideoEncoderPlugin implements
     private MediaMuxer mMediaMuxer;
     private int mVideoFrameIdx;
     private int mAudioFrameIdx;
+    private int mVideoTrackIndex;
+    private int mAudioTrackIndex;
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
@@ -58,7 +70,7 @@ public class FlutterQuickmVideoEncoderPlugin implements
                     videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
                     videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
                     videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-                    videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL);
+                    videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
                     
                     // Video encoder
                     mVideoEncoder = MediaCodec.createEncoderByType("video/avc");
@@ -66,15 +78,22 @@ public class FlutterQuickmVideoEncoderPlugin implements
 
                     // Audio format
                     MediaFormat audioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, 1); // Mono channel
-                    audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, 64000); // Example bitrate
+                    audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, 64000); // audio bitrate
                     audioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
 
                     // Audio encoder
-                    MediaCodec mAudioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
+                    mAudioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
                     mAudioEncoder.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
                     
-                    // Initialize the mMediaMuxer
-                    mMediaMuxer mMediaMuxer = new mMediaMuxer(filepath, mMediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                    // Initialize the MediaMuxer
+                    mMediaMuxer = new MediaMuxer(filepath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                    mVideoTrackIndex = mMediaMuxer.addTrack(mVideoEncoder.getOutputFormat());
+                    mAudioTrackIndex = mMediaMuxer.addTrack(mAudioEncoder.getOutputFormat());
+
+                    // Start 
+                    mVideoEncoder.start();
+                    mAudioEncoder.start();
+                    mMediaMuxer.start();
 
                     // success
                     result.success(null);
@@ -103,7 +122,7 @@ public class FlutterQuickmVideoEncoderPlugin implements
                     while (outIdx >= 0) {
                         ByteBuffer buf = mVideoEncoder.getOutputBuffer(outIdx);
                         if (bufferInfo.flags != MediaCodec.BUFFER_FLAG_CODEC_CONFIG) {
-                            mMediaMuxer.writeSampleData(videoTrackIndex, buf, bufferInfo);
+                            mMediaMuxer.writeSampleData(mVideoTrackIndex, buf, bufferInfo);
                         }
                         mVideoEncoder.releaseOutputBuffer(outIdx, false);
                         outIdx = mVideoEncoder.dequeueOutputBuffer(bufferInfo, 0);
@@ -119,30 +138,30 @@ public class FlutterQuickmVideoEncoderPlugin implements
 
                 case "appendAudioFrame":
 
-                    ByteBuffer frameData = ((ByteBuffer) call.argument("rawRgba"));
+                    ByteBuffer frameData = ((ByteBuffer) call.argument("rawPcm"));
 
                     // time
                     long presentationTime = mAudioFrameIdx * 1000000000L / fps;
 
                     // feed encoder
-                    int inIdx = mVideoEncoder.dequeueInputBuffer(-1);
+                    int inIdx = mAudioEncoder.dequeueInputBuffer(-1);
                     if (inIdx >= 0) {
-                        ByteBuffer buf = mVideoEncoder.getInputBuffer(inIdx);
+                        ByteBuffer buf = mAudioEncoder.getInputBuffer(inIdx);
                         buf.clear();
                         buf.put(frameData);
-                        mVideoEncoder.queueInputBuffer(inIdx, 0, frameData.capacity(), presentationTime, 0);
+                        mAudioEncoder.queueInputBuffer(inIdx, 0, frameData.capacity(), presentationTime, 0);
                     }
 
                     // retrieve encoded data & feed muxer
                     MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-                    int outIdx = mVideoEncoder.dequeueOutputBuffer(bufferInfo, 0);
+                    int outIdx = mAudioEncoder.dequeueOutputBuffer(bufferInfo, 0);
                     while (outIdx >= 0) {
-                        ByteBuffer buf = mVideoEncoder.getOutputBuffer(outIdx);
+                        ByteBuffer buf = mAudioEncoder.getOutputBuffer(outIdx);
                         if (bufferInfo.flags != MediaCodec.BUFFER_FLAG_CODEC_CONFIG) {
-                            mMediaMuxer.writeSampleData(videoTrackIndex, buf, bufferInfo);
+                            mMediaMuxer.writeSampleData(mAudioTrackIndex, buf, bufferInfo);
                         }
-                        mVideoEncoder.releaseOutputBuffer(outIdx, false);
-                        outIdx = mVideoEncoder.dequeueOutputBuffer(bufferInfo, 0);
+                        mAudioEncoder.releaseOutputBuffer(outIdx, false);
+                        outIdx = mAudioEncoder.dequeueOutputBuffer(bufferInfo, 0);
                     }
 
                     result.success(null);
