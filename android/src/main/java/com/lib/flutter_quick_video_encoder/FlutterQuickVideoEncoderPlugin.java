@@ -2,6 +2,7 @@ package com.lib.flutter_quick_video_encoder;
 
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
 
@@ -48,6 +49,11 @@ public class FlutterQuickVideoEncoderPlugin implements
     public void onMethodCall(MethodCall call, MethodChannel.Result result) {
         try{
             switch (call.method) {
+                case "setLogLevel":
+                {
+                    result.success(null);
+                    break;
+                }
                 case "setup":
                 {
                     // Extract parameters
@@ -65,11 +71,25 @@ public class FlutterQuickVideoEncoderPlugin implements
                     mVideoFrameIdx = 0;
                     mAudioFrameIdx = 0;
 
+                    // check video support
+                    int colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface;
+                    if (isColorFormatSupported("video/avc", colorFormat) == false) {
+                        result.error("UnsupportedColorFormat", "RGBA color format is not supported", null);
+                        return;
+                    }
+
+                    // check audio support
+                    int audioProfile = MediaCodecInfo.CodecProfileLevel.AACObjectLC;
+                    if (!isAudioFormatSupported(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioProfile)) {
+                        result.error("UnsupportedAudioFormat", "AAC audio format is not supported", null);
+                        return;
+                    }
+
                     // Video format
                     MediaFormat videoFormat = MediaFormat.createVideoFormat("video/avc", width, height);
                     videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
                     videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
-                    videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+                    videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
                     videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
                     
                     // Video encoder
@@ -78,8 +98,8 @@ public class FlutterQuickVideoEncoderPlugin implements
 
                     // Audio format
                     MediaFormat audioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, 1); // Mono channel
-                    audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, 64000); // audio bitrate
-                    audioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
+                    audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, 64000);
+                    audioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, audioProfile);
 
                     // Audio encoder
                     mAudioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
@@ -90,10 +110,26 @@ public class FlutterQuickVideoEncoderPlugin implements
                     mVideoTrackIndex = mMediaMuxer.addTrack(mVideoEncoder.getOutputFormat());
                     mAudioTrackIndex = mMediaMuxer.addTrack(mAudioEncoder.getOutputFormat());
 
-                    // Start 
-                    mVideoEncoder.start();
-                    mAudioEncoder.start();
-                    mMediaMuxer.start();
+                    try {
+                        mVideoEncoder.start();
+                    } catch (Exception e) {
+                        result.error("Hardware", "Could not start video encoder. Check logs.", null);
+                        return;
+                    }
+
+                    try {
+                        mAudioEncoder.start();
+                    } catch (Exception e) {
+                        result.error("Hardware", "Could not start audio encoder. Check logs.", null);
+                        return;
+                    }
+
+                    try {
+                        mMediaMuxer.start();
+                    } catch (Exception e) {
+                        result.error("Hardware", "Could not start media muxer. Check logs.", null);
+                        return;
+                    }
 
                     // success
                     result.success(null);
@@ -197,5 +233,66 @@ public class FlutterQuickVideoEncoderPlugin implements
             result.error("androidException", e.toString(), stackTrace);
             return;
         }
+    }
+
+    private boolean isColorFormatSupported(String mimeType, int desiredColorFormat) {
+        MediaCodecInfo codecInfo = getCodecInfo(mimeType);
+        if (codecInfo == null) {
+            return false;
+        }
+
+        MediaCodecInfo.CodecCapabilities capabilities = codecInfo.getCapabilitiesForType(mimeType);
+        for (int colorFormat : capabilities.colorFormats) {
+            if (colorFormat == desiredColorFormat) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean isAudioFormatSupported(String mimeType, int sampleRate, int profile) {
+        MediaCodecInfo codecInfo = getCodecInfo(mimeType);
+        if (codecInfo == null) {
+            return false;
+        }
+
+        MediaCodecInfo.CodecCapabilities capabilities = codecInfo.getCapabilitiesForType(mimeType);
+
+        // Check if sample rate is supported
+        boolean isSampleRateSupported = false;
+        for (int rate : capabilities.getAudioCapabilities().getSupportedSampleRates()) {
+            if (rate == sampleRate) {
+                isSampleRateSupported = true;
+                break;
+            }
+        }
+
+        // Check if profile is supported
+        boolean isProfileSupported = (capabilities.profileLevels != null);
+        for (MediaCodecInfo.CodecProfileLevel level : capabilities.profileLevels) {
+            if (level.profile == profile) {
+                isProfileSupported = true;
+                break;
+            }
+        }
+
+        return isSampleRateSupported && isProfileSupported;
+    }
+
+    private MediaCodecInfo getCodecInfo(String mimeType) {
+        MediaCodecList codecList = new MediaCodecList(MediaCodecList.ALL_CODECS);
+        for (MediaCodecInfo codecInfo : codecList.getCodecInfos()) {
+            if (!codecInfo.isEncoder()) {
+                continue;
+            }
+            String[] types = codecInfo.getSupportedTypes();
+            for (String type : types) {
+                if (type.equalsIgnoreCase(mimeType)) {
+                    return codecInfo;
+                }
+            }
+        }
+        return null;
     }
 }

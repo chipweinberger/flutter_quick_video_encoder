@@ -16,9 +16,7 @@ class FlutterQuickVideoEncoder {
   static int width = 0;
   static int height = 0;
   static int fps = 0;
-  static int bitrate = 0;
   static int sampleRate = 0;
-  static String filepath = "";
 
   /// set log level
   static Future<void> setLogLevel(LogLevel level) async {
@@ -36,9 +34,7 @@ class FlutterQuickVideoEncoder {
     FlutterQuickVideoEncoder.width = width;
     FlutterQuickVideoEncoder.height = height;
     FlutterQuickVideoEncoder.fps = fps;
-    FlutterQuickVideoEncoder.bitrate = bitrate;
     FlutterQuickVideoEncoder.sampleRate = sampleRate;
-    FlutterQuickVideoEncoder.filepath = filepath;
     return await _invokeMethod('setup', {
       'width': width,
       'height': height,
@@ -71,9 +67,7 @@ class FlutterQuickVideoEncoder {
     FlutterQuickVideoEncoder.width = 0;
     FlutterQuickVideoEncoder.height = 0;
     FlutterQuickVideoEncoder.fps = 0;
-    FlutterQuickVideoEncoder.bitrate = 0;
     FlutterQuickVideoEncoder.sampleRate = 0;
-    FlutterQuickVideoEncoder.filepath = "";
     return await _invokeMethod('finish');
   }
 
