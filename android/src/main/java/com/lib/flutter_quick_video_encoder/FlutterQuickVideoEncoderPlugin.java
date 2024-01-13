@@ -15,7 +15,7 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 
 
-public class FlutterQuickmVideoEncoderPlugin implements
+public class FlutterQuickVideoEncoderPlugin implements
     FlutterPlugin,
     MethodChannel.MethodCallHandler
 {
@@ -33,23 +33,23 @@ public class FlutterQuickmVideoEncoderPlugin implements
     private int mAudioTrackIndex;
 
     @Override
-    public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
+    public void onAttachedToEngine(FlutterPluginBinding binding) {
         BinaryMessenger messenger = binding.getBinaryMessenger();
         mMethodChannel = new MethodChannel(messenger, CHANNEL_NAME);
         mMethodChannel.setMethodCallHandler(this);
     }
 
     @Override
-    public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+    public void onDetachedFromEngine(FlutterPluginBinding binding) {
         mMethodChannel.setMethodCallHandler(null);
     }
 
     @Override
-    public void onMethodCall(@NonNull MethodCall call, @NonNull MethodChannel.Result result) {
+    public void onMethodCall(MethodCall call, MethodChannel.Result result) {
         try{
             switch (call.method) {
                 case "setup":
-
+                {
                     // Extract parameters
                     int width = call.argument("width");
                     int height = call.argument("height");
@@ -99,21 +99,21 @@ public class FlutterQuickmVideoEncoderPlugin implements
                     result.success(null);
 
                     break;
-
+                }
                 case "addVideoFrame":
-
-                    ByteBuffer frameData = ((ByteBuffer) call.argument("rawRgba"));
+                {
+                    ByteBuffer rawRgba = ((ByteBuffer) call.argument("rawRgba"));
 
                     // time
-                    long presentationTime = mVideoFrameIdx * 1000000000L / fps;
+                    long presentationTime = mVideoFrameIdx * 1000000000L / mFps;
 
                     // feed encoder
                     int inIdx = mVideoEncoder.dequeueInputBuffer(-1);
                     if (inIdx >= 0) {
                         ByteBuffer buf = mVideoEncoder.getInputBuffer(inIdx);
                         buf.clear();
-                        buf.put(frameData);
-                        mVideoEncoder.queueInputBuffer(inIdx, 0, frameData.capacity(), presentationTime, 0);
+                        buf.put(rawRgba);
+                        mVideoEncoder.queueInputBuffer(inIdx, 0, rawRgba.capacity(), presentationTime, 0);
                     }
 
                     // retrieve encoded data & feed muxer
@@ -135,21 +135,21 @@ public class FlutterQuickmVideoEncoderPlugin implements
                     result.success(null);
 
                     break;
-
+                }
                 case "appendAudioFrame":
-
-                    ByteBuffer frameData = ((ByteBuffer) call.argument("rawPcm"));
+                {
+                    ByteBuffer rawPcm = ((ByteBuffer) call.argument("rawPcm"));
 
                     // time
-                    long presentationTime = mAudioFrameIdx * 1000000000L / fps;
+                    long presentationTime = mAudioFrameIdx * 1000000000L / mFps;
 
                     // feed encoder
                     int inIdx = mAudioEncoder.dequeueInputBuffer(-1);
                     if (inIdx >= 0) {
                         ByteBuffer buf = mAudioEncoder.getInputBuffer(inIdx);
                         buf.clear();
-                        buf.put(frameData);
-                        mAudioEncoder.queueInputBuffer(inIdx, 0, frameData.capacity(), presentationTime, 0);
+                        buf.put(rawPcm);
+                        mAudioEncoder.queueInputBuffer(inIdx, 0, rawPcm.capacity(), presentationTime, 0);
                     }
 
                     // retrieve encoded data & feed muxer
@@ -166,9 +166,9 @@ public class FlutterQuickmVideoEncoderPlugin implements
 
                     result.success(null);
                     break;
-
+                }
                 case "finish":
-
+                {
                     // flush video encoder
                     mVideoEncoder.stop();
                     mVideoEncoder.release();
@@ -184,6 +184,7 @@ public class FlutterQuickmVideoEncoderPlugin implements
                     result.success(null);
 
                     break;
+                }
                 default:
                     result.notImplemented();
                     break;
