@@ -10,6 +10,23 @@ enum LogLevel {
   verbose,
 }
 
+// H264 profile level
+enum ProfileLevel {
+  any,
+  high40,
+  high41,
+  main30,
+  main31,
+  main32,
+  main41,
+  baseline30,
+  baseline31,
+  baseline41,
+  highAutoLevel,
+  mainAutoLevel,
+  baselineAutoLevel,
+}
+
 class FlutterQuickVideoEncoder {
   static const MethodChannel _channel = const MethodChannel('flutter_quick_video_encoder/methods');
 
@@ -31,6 +48,7 @@ class FlutterQuickVideoEncoder {
       required int height,
       required int fps,
       required int videoBitrate,
+      required ProfileLevel profileLevel,
       required int audioChannels,
       required int audioBitrate,
       required int sampleRate,
@@ -46,6 +64,7 @@ class FlutterQuickVideoEncoder {
       'height': height,
       'fps': fps,
       'videoBitrate': videoBitrate,
+      'profileLevel': profileLevel.toString().split('.')[1],
       'audioChannels': audioChannels,
       'audioBitrate': audioBitrate,
       'sampleRate': sampleRate,

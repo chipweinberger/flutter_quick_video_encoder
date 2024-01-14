@@ -82,6 +82,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             NSNumber *nAudioChannels = args[@"audioChannels"];
             NSNumber *nAudioBitrate =  args[@"audioBitrate"];
             NSNumber *nSampleRate =    args[@"sampleRate"];
+            NSString *nProfileLevel =  args[@"profileLevel"];
             NSString *filepath =       args[@"filepath"];
 
             // remember these
@@ -124,9 +125,15 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             }
 
             // Video compression settings
-            NSDictionary *compressionProperties = @{
+            NSMutableDictionary *compressionProperties = [NSMutableDictionary dictionaryWithDictionary:@{
                 AVVideoAverageBitRateKey : @(nVideoBitrate.integerValue)
-            };
+            }];
+
+            // Add profile level only if it's not 'any'
+            if (![nProfileLevel isEqualToString:@"any"]) {
+                NSString *profileLevelValue = [self parseProfileLevel:nProfileLevel];
+                [compressionProperties setObject:profileLevelValue forKey:AVVideoProfileLevelKey];
+            }
 
             // Video settings
             NSDictionary *videoSettings = @{
@@ -172,6 +179,15 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             }
             [self.mAssetWriter addInput:self.mAudioInput];
 
+            // Check status
+            if (self.mAssetWriter.status == AVAssetWriterStatusFailed) {
+                NSError *error = self.mAssetWriter.error;
+                result([FlutterError errorWithCode:@"AVAssetWriterStatus"
+                                        message:@"Failed to initialize AVAssetWriter"
+                                        details:[error localizedDescription]]);
+                return;
+            }
+
             result(@(true));
         }
         else if ([@"appendVideoFrame" isEqualToString:call.method])
@@ -193,6 +209,15 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 result([FlutterError errorWithCode:@"AVAssetWriterInputUnavailable"
                                         message:@"AVAssetWriterInput is not initialized"
                                         details:nil]);
+                return;
+            }
+
+            // Check status
+            if (self.mAssetWriter.status == AVAssetWriterStatusFailed) {
+                NSError *error = self.mAssetWriter.error;
+                result([FlutterError errorWithCode:@"AVAssetWriterStatus"
+                                        message:@"AVAssetWriter bad status"
+                                        details:[error localizedDescription]]);
                 return;
             }
 
@@ -257,6 +282,15 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 result([FlutterError errorWithCode:@"AVAssetWriterInputUnavailable"
                                         message:@"AVAssetWriterInput is not initialized"
                                         details:nil]);
+                return;
+            }
+
+            // Check status
+            if (self.mAssetWriter.status == AVAssetWriterStatusFailed) {
+                NSError *error = self.mAssetWriter.error;
+                result([FlutterError errorWithCode:@"AVAssetWriterStatus"
+                                        message:@"AVAssetWriter bad status"
+                                        details:[error localizedDescription]]);
                 return;
             }
 
@@ -350,6 +384,22 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         NSDictionary *details = @{@"stackTrace": stackTrace};
         result([FlutterError errorWithCode:@"iosException" message:[e reason] details:details]);
     }
+}
+
+- (NSString*)parseProfileLevel:(NSString*)str {
+    if ([str isEqualToString:@"high40"])                 {return AVVideoProfileLevelH264High40;}
+    else if ([str isEqualToString:@"high41"])            {return AVVideoProfileLevelH264High41;}
+    else if ([str isEqualToString:@"main30"])            {return AVVideoProfileLevelH264Main30;}
+    else if ([str isEqualToString:@"main31"])            {return AVVideoProfileLevelH264Main31;}
+    else if ([str isEqualToString:@"main32"])            {return AVVideoProfileLevelH264Main32;}
+    else if ([str isEqualToString:@"main41"])            {return AVVideoProfileLevelH264Main41;}
+    else if ([str isEqualToString:@"baseline30"])        {return AVVideoProfileLevelH264Baseline30;}
+    else if ([str isEqualToString:@"baseline31"])        {return AVVideoProfileLevelH264Baseline31;}
+    else if ([str isEqualToString:@"baseline41"])        {return AVVideoProfileLevelH264Baseline41;}
+    else if ([str isEqualToString:@"highAutoLevel"])     {return AVVideoProfileLevelH264HighAutoLevel;}
+    else if ([str isEqualToString:@"mainAutoLevel"])     {return AVVideoProfileLevelH264MainAutoLevel;}
+    else if ([str isEqualToString:@"baselineAutoLevel"]) {return AVVideoProfileLevelH264BaselineAutoLevel;}
+    else                                                 {return AVVideoProfileLevelH264BaselineAutoLevel;}
 }
 @end
 

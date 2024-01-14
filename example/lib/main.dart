@@ -110,6 +110,7 @@ class _FqveAppState extends State<FqveApp> {
         height: height,
         fps: fps,
         videoBitrate: 1000000,
+        profileLevel: ProfileLevel.any,
         audioBitrate: 64000,
         audioChannels: audioChannels,
         sampleRate: sampleRate,
