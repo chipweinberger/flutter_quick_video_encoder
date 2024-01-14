@@ -27,7 +27,8 @@ class _FqveAppState extends State<FqveApp> {
   double progress = 0.0;
   static const int width = 1280;
   static const int height = 720;
-  static const int fps = 60;
+  static const int fps = 30;
+  static const int audioChannels = 2;
   static const int sampleRate = 44100;
 
   BuildContext? _context;
@@ -67,26 +68,33 @@ class _FqveAppState extends State<FqveApp> {
 
   // generate 1 frame worth of audio samples
   Uint8List _generateAudioFrame(int frameIndex) {
+    const int bytesPerSample = 2;
     const double htz = 220.0; // sine wave htz
-    const int samplesPerFrame = sampleRate ~/ fps;
+    const int sampleCount = sampleRate ~/ fps;
 
     // Calculate the phase shift for this frame to maintain continuity
-    double phaseShift = 2 * pi * htz * frameIndex / 60;
+    double phaseShift = 2 * pi * htz * frameIndex / fps;
 
-    // Create a buffer for the audio data
-    Int16List audioBuffer = Int16List(samplesPerFrame);
+    // Create a ByteData buffer for the audio data
+    ByteData byteData = ByteData(sampleCount * bytesPerSample * audioChannels);
 
     // Fill in the buffer
-    for (int i = 0; i < samplesPerFrame; i++) {
+    for (int i = 0; i < sampleCount; i++) {
       double t = i / sampleRate;
       double sampleValue = sin(2 * pi * htz * t + phaseShift);
 
       // Convert the sample value to 16-bit PCM format
-      audioBuffer[i] = (sampleValue * 32767).toInt();
+      int sampleInt = (sampleValue * 32767).toInt();
+
+      // Store the sample in the buffer as little-endian
+      for (int n = 0; n < audioChannels; n++) {
+        int bufferIndex = (i * audioChannels + n) * bytesPerSample;
+        byteData.setInt16(bufferIndex, sampleInt, Endian.little);
+      }
     }
 
     // Convert the buffer to Uint8List
-    return Uint8List.view(audioBuffer.buffer);
+    return byteData.buffer.asUint8List();
   }
 
   Future<void> exportVideo() async {
@@ -95,11 +103,13 @@ class _FqveAppState extends State<FqveApp> {
       var filepath = "${appDir.path}/exportedVideo.mp4";
 
       await FlutterQuickVideoEncoder.setup(
-        width: 1280,
-        height: 720,
-        fps: 60,
-        bitrate: 1000000,
-        sampleRate: 44100,
+        width: width,
+        height: height,
+        fps: fps,
+        videoBitrate: 1000000,
+        audioBitrate: 64000,
+        audioChannels: audioChannels,
+        sampleRate: sampleRate,
         filepath: filepath,
       );
 
@@ -136,37 +146,35 @@ class _FqveAppState extends State<FqveApp> {
           primarySwatch: Colors.blue,
         ),
         home: ScaffoldMessenger(
-          child: Builder(
-            builder: (context) {
-              _context = context;
-              return Scaffold(
-                appBar: AppBar(
-                  centerTitle: true,
-                  title: Text('Flutter Quick Video Encoder'),
-                ),
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton(
-                        onPressed: exportVideo,
-                        child: Text('Export Test Video'),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(32.0),
-                        child: Opacity(
-                          opacity: progress > 0 ? 1 : 0,
-                          child: LinearProgressIndicator(
-                            value: progress,
-                          ),
+          child: Builder(builder: (context) {
+            _context = context;
+            return Scaffold(
+              appBar: AppBar(
+                centerTitle: true,
+                title: Text('Flutter Quick Video Encoder'),
+              ),
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton(
+                      onPressed: exportVideo,
+                      child: Text('Export Test Video'),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(32.0),
+                      child: Opacity(
+                        opacity: progress > 0 ? 1 : 0,
+                        child: LinearProgressIndicator(
+                          value: progress,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              );
-            }
-          ),
+              ),
+            );
+          }),
         ));
   }
 }

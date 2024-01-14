@@ -21,7 +21,9 @@ await FlutterQuickVideoEncoder.setup(
     width: 1920,
     height: 1080,
     fps: 60,
-    bitrate: 2500000,
+    videoBitrate: 2500000,
+    audioChannels: 1,
+    audioBitrate: 64000,
     sampleRate: 44100,
     filepath: "/documents/video.mp4",
 );

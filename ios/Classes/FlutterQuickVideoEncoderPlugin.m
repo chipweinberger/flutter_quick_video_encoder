@@ -15,7 +15,7 @@
 
 // forward define
 CMSampleBufferRef createVideoSampleBuffer(int fps, int videoFrameIdx, int width, int height, NSData *videoFrameData);
-CMSampleBufferRef createAudioSampleBuffer(int fps, int audioFrameIdx, int sampleRate, NSData *audioSampleData);
+CMSampleBufferRef createAudioSampleBuffer(int fps, int audioFrameIdx, int audioChannels, int sampleRate, NSData *audioSampleData);
 
 typedef NS_ENUM(NSUInteger, LogLevel) {
     none = 0,
@@ -36,7 +36,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 @property(nonatomic) int width;
 @property(nonatomic) int height;
 @property(nonatomic) int fps;
-@property(nonatomic) int bitrate;
+@property(nonatomic) int audioChannels;
 @property(nonatomic) int sampleRate;
 @end
 
@@ -75,19 +75,21 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             NSDictionary *args = (NSDictionary*)call.arguments;
 
             // Extract parameters from 'args'
-            NSNumber *nWidth = args[@"width"];
-            NSNumber *nHeight = args[@"height"];
-            NSNumber *nFps = args[@"fps"];
-            NSNumber *nBitrate = args[@"bitrate"];
-            NSNumber *nSampleRate = args[@"sampleRate"];
-            NSString *filepath = args[@"filepath"];
+            NSNumber *nWidth =         args[@"width"];
+            NSNumber *nHeight =        args[@"height"];
+            NSNumber *nFps =           args[@"fps"];
+            NSNumber *nVideoBitrate =  args[@"videoBitrate"];
+            NSNumber *nAudioChannels = args[@"audioChannels"];
+            NSNumber *nAudioBitrate =  args[@"audioBitrate"];
+            NSNumber *nSampleRate =    args[@"sampleRate"];
+            NSString *filepath =       args[@"filepath"];
 
             // remember these
-            self.width =      (int) nWidth.integerValue;
-            self.height =     (int) nHeight.integerValue;
-            self.fps =        (int) nFps.integerValue;
-            self.bitrate =    (int) nBitrate.integerValue;
-            self.sampleRate = (int) nSampleRate.integerValue;
+            self.width =         (int) nWidth.integerValue;
+            self.height =        (int) nHeight.integerValue;
+            self.fps =           (int) nFps.integerValue;
+            self.audioChannels = (int) nAudioChannels.integerValue;
+            self.sampleRate =    (int) nSampleRate.integerValue;
 
             // reset counters
             self.videoFrameIdx = 0;
@@ -121,12 +123,18 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 return;
             }
 
+            // Video compression settings
+            NSDictionary *compressionProperties = @{
+                AVVideoAverageBitRateKey : @(nVideoBitrate.integerValue)
+            };
+
             // Video settings
-            NSDictionary *compressionProperties = @{AVVideoAverageBitRateKey : @(self.bitrate)};
-            NSDictionary *videoSettings = @{AVVideoCodecKey : AVVideoCodecTypeH264,
-                                            AVVideoWidthKey : @(self.width),
-                                            AVVideoHeightKey : @(self.height),
-                                            AVVideoCompressionPropertiesKey : compressionProperties};
+            NSDictionary *videoSettings = @{
+                AVVideoCodecKey : AVVideoCodecTypeH264,
+                AVVideoWidthKey : @(self.width),
+                AVVideoHeightKey : @(self.height),
+                AVVideoCompressionPropertiesKey : compressionProperties
+            };
 
             // Initialize video input
             self.mVideoInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeVideo
@@ -143,10 +151,12 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             [self.mAssetWriter addInput:self.mVideoInput];
 
             // Audio settings
-            // Adjust audio settings as needed
-            NSDictionary* audioSettings = @{AVFormatIDKey : @(kAudioFormatMPEG4AAC),
-                                            AVSampleRateKey : @(self.sampleRate),
-                                            AVNumberOfChannelsKey: @1};
+            NSDictionary* audioSettings = @{
+                AVFormatIDKey : @(kAudioFormatMPEG4AAC),
+                AVSampleRateKey : @(self.sampleRate),
+                AVNumberOfChannelsKey: @(nAudioChannels.integerValue),
+                AVEncoderBitRateKey: @(nAudioBitrate.integerValue)
+            };
 
             // Initialize audio input
             self.mAudioInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio
@@ -230,7 +240,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
         }
         else if ([@"appendAudioFrame" isEqualToString:call.method])
         {
-            NSDictionary *args = (NSDictionary*)call.arguments;
+            NSDictionary *args = (NSDictionary*) call.arguments;
             FlutterStandardTypedData *rawPcmData = args[@"rawPcm"];
             NSData *audioSampleData = rawPcmData.data;
 
@@ -258,7 +268,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
             // Create audio sample buffer from the provided data
             CMSampleBufferRef sampleBuffer = createAudioSampleBuffer(
-                self.fps, self.audioFrameIdx, self.sampleRate, audioSampleData);
+                self.fps, self.audioFrameIdx, self.audioChannels, self.sampleRate, audioSampleData);
             if (!sampleBuffer) {
                 result([FlutterError errorWithCode:@"SampleBufferCreationFailed"
                                         message:@"Failed to create audio sample buffer"
@@ -409,7 +419,7 @@ CMSampleBufferRef createVideoSampleBuffer(int fps, int frameIdx, int width, int 
 }
 
 
-CMSampleBufferRef createAudioSampleBuffer(int fps, int frameIdx, int sampleRate, NSData *audioSampleData)
+CMSampleBufferRef createAudioSampleBuffer(int fps, int frameIdx, int audioChannels, int sampleRate, NSData *audioSampleData)
 {
     int numSamples = (int)[audioSampleData length] / sizeof(int16_t);
 
@@ -434,10 +444,10 @@ CMSampleBufferRef createAudioSampleBuffer(int fps, int frameIdx, int sampleRate,
         .mSampleRate = sampleRate,
         .mFormatID = kAudioFormatLinearPCM,
         .mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked,
-        .mBytesPerPacket = 2,
+        .mBytesPerPacket = 2 * audioChannels,
         .mFramesPerPacket = 1,
-        .mBytesPerFrame = 2,
-        .mChannelsPerFrame = 1,
+        .mBytesPerFrame = 2 * audioChannels,
+        .mChannelsPerFrame = audioChannels,
         .mBitsPerChannel = 16,
         .mReserved = 0
     };

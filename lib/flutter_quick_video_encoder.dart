@@ -16,6 +16,7 @@ class FlutterQuickVideoEncoder {
   static int width = 0;
   static int height = 0;
   static int fps = 0;
+  static int audioChannels = 0;
   static int sampleRate = 0;
 
   /// set log level
@@ -28,18 +29,23 @@ class FlutterQuickVideoEncoder {
       {required int width,
       required int height,
       required int fps,
-      required int bitrate,
+      required int videoBitrate,
+      required int audioChannels,
+      required int audioBitrate,
       required int sampleRate,
       required String filepath}) async {
     FlutterQuickVideoEncoder.width = width;
     FlutterQuickVideoEncoder.height = height;
     FlutterQuickVideoEncoder.fps = fps;
+    FlutterQuickVideoEncoder.audioChannels = audioChannels;
     FlutterQuickVideoEncoder.sampleRate = sampleRate;
     return await _invokeMethod('setup', {
       'width': width,
       'height': height,
       'fps': fps,
-      'bitrate': bitrate,
+      'videoBitrate': videoBitrate,
+      'audioChannels': audioChannels,
+      'audioBitrate': audioBitrate,
       'sampleRate': sampleRate,
       'filepath': filepath,
     });
@@ -54,9 +60,10 @@ class FlutterQuickVideoEncoder {
   }
 
   /// append raw pcm audio samples
+  ///  - 16 bit, little-endiant
+  ///  - when using stereo audio, samples should be interleaved left channel first
   static Future<void> appendAudioFrame(Uint8List rawPcm) async {
-    // we only support 16-bit mono audio right now
-    assert(rawPcm.length == sampleRate * 2 / fps, "invalid data length");
+    assert(rawPcm.length == (sampleRate * audioChannels * 2) / fps, "invalid data length");
     return await _invokeMethod('appendAudioFrame', {
       'rawPcm': rawPcm,
     });
@@ -64,10 +71,11 @@ class FlutterQuickVideoEncoder {
 
   /// finish writing the video file
   static Future<void> finish() async {
-    FlutterQuickVideoEncoder.width = 0;
-    FlutterQuickVideoEncoder.height = 0;
-    FlutterQuickVideoEncoder.fps = 0;
-    FlutterQuickVideoEncoder.sampleRate = 0;
+    width = 0;
+    height = 0;
+    fps = 0;
+    audioChannels = 0;
+    sampleRate = 0;
     return await _invokeMethod('finish');
   }
 

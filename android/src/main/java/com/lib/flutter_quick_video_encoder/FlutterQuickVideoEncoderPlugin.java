@@ -59,12 +59,14 @@ public class FlutterQuickVideoEncoderPlugin implements
                 case "setup":
                 {
                     // Extract parameters
-                    int width = call.argument("width");
-                    int height = call.argument("height");
-                    int fps = call.argument("fps");
-                    int bitrate = call.argument("bitrate");
-                    int sampleRate = call.argument("sampleRate");
-                    String filepath = call.argument("filepath");
+                    int width =         call.argument("width");
+                    int height =        call.argument("height");
+                    int fps =           call.argument("fps");
+                    int videoBitrate =  call.argument("videoBitrate");
+                    int audioChannels = call.argument("audioChannels");
+                    int audioBitrate =  call.argument("audioBitrate");
+                    int sampleRate =    call.argument("sampleRate");
+                    String filepath =   call.argument("filepath");
 
                     // save
                     mFps = fps;
@@ -91,7 +93,7 @@ public class FlutterQuickVideoEncoderPlugin implements
 
                     // Video format
                     MediaFormat videoFormat = MediaFormat.createVideoFormat("video/avc", width, height);
-                    videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+                    videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
                     videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
                     videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
                     videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
@@ -101,8 +103,8 @@ public class FlutterQuickVideoEncoderPlugin implements
                     mVideoEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
 
                     // Audio format
-                    MediaFormat audioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, 1); // Mono channel
-                    audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, 64000);
+                    MediaFormat audioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioChannels);
+                    audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
                     audioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, audioProfile);
 
                     // Audio encoder
