@@ -36,6 +36,19 @@ for(int i = 0; i < frameCount; i++) {
 await FlutterQuickVideoEncoder.finish();
 ```
 
+## Example App
+
+Enable the platforms you need.
+
+```
+cd ./example                      
+flutter config --enable-macos-desktop                                                      
+flutter config --enable-android 
+flutter config --enable-ios 
+flutter create .
+flutter run
+```
+
 ## Create video frames using ui.Image
 
 The easiest way to render a video frame is to use Flutter!
@@ -111,19 +124,6 @@ class _MyWidgetState extends State<MyWidget> {
     }
   }
 }
-```
-
-## Example App
-
-Enable the platforms you need.
-
-```
-cd ./example                      
-flutter config --enable-macos-desktop                                                      
-flutter config --enable-android 
-flutter config --enable-ios 
-flutter create .
-flutter run
 ```
 
 

@@ -1,3 +1,6 @@
+## 1.0.2
+* **[Fix]** must ensure output directory exists
+
 ## 1.0.1
 * **[Feature]** add support for audio bitrate and stereo audio
 
