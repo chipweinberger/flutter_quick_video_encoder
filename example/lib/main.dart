@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_quick_video_encoder/flutter_quick_video_encoder.dart';
@@ -39,31 +40,33 @@ class _FqveAppState extends State<FqveApp> {
     FlutterQuickVideoEncoder.setLogLevel(LogLevel.verbose);
   }
 
-  // generate 1 frame of video data
-  Uint8List _generateVideoFrame(int frameIndex) {
+  Future<Uint8List> _generateVideoFrame(int frameIndex) async {
     const int boxSize = 50; // Size of the moving box
-
-    // Initialize an RGBA buffer
-    Uint32List buffer = Uint32List(width * height);
 
     // Calculate the box position
     int boxX = (frameIndex * 5) % width;
     int boxY = (frameIndex * 5) % height;
 
-    // Draw the moving box
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        // Check if the pixel is inside the box
-        if (x >= boxX && x < boxX + boxSize && y >= boxY && y < boxY + boxSize) {
-          buffer[y * width + x] = 0xFF0000FF; // Blue in ARGB
-        } else {
-          buffer[y * width + x] = 0xFFFFFFFF; // White in ARGB
-        }
-      }
-    }
+    // Paint the moving box
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint();
 
-    // Convert the buffer to Uint8List
-    return Uint8List.view(buffer.buffer);
+    // Draw a white background
+    paint.color = Colors.white;
+    canvas.drawRect(Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()), paint);
+
+    // Draw the blue box
+    paint.color = Colors.blue;
+    canvas.drawRect(Rect.fromLTWH(boxX.toDouble(), boxY.toDouble(), boxSize.toDouble(), boxSize.toDouble()), paint);
+
+    // Convert canvas to image
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width, height);
+
+    // Convert the image to a byte array
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+    return byteData!.buffer.asUint8List();
   }
 
   // generate 1 frame worth of audio samples
@@ -115,7 +118,7 @@ class _FqveAppState extends State<FqveApp> {
 
       int totalFrames = 120;
       for (int i = 0; i < totalFrames; i++) {
-        Uint8List frameData = _generateVideoFrame(i);
+        Uint8List frameData = await _generateVideoFrame(i);
         Uint8List audioData = _generateAudioFrame(i);
         await FlutterQuickVideoEncoder.appendVideoFrame(frameData);
         await FlutterQuickVideoEncoder.appendAudioFrame(audioData);

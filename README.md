@@ -36,6 +36,83 @@ for(int i = 0; i < frameCount; i++) {
 await FlutterQuickVideoEncoder.finish();
 ```
 
+## Create video frames using ui.Image
+
+The easiest way to render a video frame is to use Flutter!
+
+For example, you can render an RGBA frame using [ui.Image](https://api.flutter.dev/flutter/dart-ui/Image-class.html)
+
+```
+Future<Uint8List> _generateVideoFrame(int frameIndex) async {
+    const int boxSize = 50; // Size of the moving box
+
+    // Calculate the box position
+    int boxX = (frameIndex * 5) % width;
+    int boxY = (frameIndex * 5) % height;
+
+    // Paint the moving box
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint();
+
+    // Draw a white background
+    paint.color = Colors.white;
+    canvas.drawRect(Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()), paint);
+
+    // Draw the blue box
+    paint.color = Colors.blue;
+    canvas.drawRect(Rect.fromLTWH(boxX.toDouble(), boxY.toDouble(), boxSize.toDouble(), boxSize.toDouble()), paint);
+
+    // Convert canvas to image
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width, height);
+
+    // Convert the image to a byte array
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+    return byteData!.buffer.asUint8List();
+}
+```
+
+## Create video frames from Widgets
+
+You can also create video frames from widgets, using `RenderRepaintBoundary`
+
+```
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'dart:typed_data';
+
+class MyWidget extends StatefulWidget {
+  @override
+  _MyWidgetState createState() => _MyWidgetState();
+}
+
+class _MyWidgetState extends State<MyWidget> {
+  GlobalKey repaintBoundaryKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      key: repaintBoundaryKey,
+      child: YourWidget(), // Replace with your actual widget
+    );
+  }
+
+  // you would then call appendVideoFrame with this data
+  Future<Uint8List?> captureWidgetAsRGBA() async {
+    try {
+      RenderRepaintBoundary boundary = repaintBoundaryKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      ui.Image image = await boundary.toImage(pixelRatio: 1.0);
+      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      return byteData?.buffer.asUint8List();
+    } catch (e) {
+      print(e);
+      return null;
+    }
+  }
+}
+```
+
 ## Example App
 
 Enable the platforms you need.
