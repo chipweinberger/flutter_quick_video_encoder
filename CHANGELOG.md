@@ -1,3 +1,6 @@
+## 1.0.3
+* **[Feature]** add support for profileLevel on ios
+
 ## 1.0.2
 * **[Fix]** must ensure output directory exists
 
