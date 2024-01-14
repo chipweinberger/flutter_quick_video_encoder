@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 
@@ -34,6 +35,7 @@ class FlutterQuickVideoEncoder {
       required int audioBitrate,
       required int sampleRate,
       required String filepath}) async {
+    _createIntermediateDirectories(filepath);
     FlutterQuickVideoEncoder.width = width;
     FlutterQuickVideoEncoder.height = height;
     FlutterQuickVideoEncoder.fps = fps;
@@ -77,6 +79,15 @@ class FlutterQuickVideoEncoder {
     audioChannels = 0;
     sampleRate = 0;
     return await _invokeMethod('finish');
+  }
+
+  // create output directory
+  static void _createIntermediateDirectories(String filepath) {
+    File file = File(filepath);
+    Directory dir = file.parent;
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
   }
 
   static Future<T?> _invokeMethod<T>(String method, [dynamic arguments]) async {
