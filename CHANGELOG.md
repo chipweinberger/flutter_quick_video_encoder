@@ -1,3 +1,6 @@
+## 1.0.4
+* **[Fix]** iOS: must convert RGBA to BGRA
+
 ## 1.0.3
 * **[Feature]** add support for profileLevel on ios
 
