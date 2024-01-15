@@ -422,8 +422,22 @@ CMSampleBufferRef createVideoSampleBuffer(int fps, int frameIdx, int width, int 
     
     CVPixelBufferLockBaseAddress(pixelBuffer, 0);
     
-    void *baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer);
-    memcpy(baseAddress, [videoFrameData bytes], [videoFrameData length]);
+    void *bgraData = CVPixelBufferGetBaseAddress(pixelBuffer);
+    uint8_t *rgbaData = (uint8_t *)[videoFrameData bytes];
+
+    // convert RGBA to BGRA and copy to pixel buffer
+    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer);
+    for (int y = 0; y < height; y++) {
+        uint8_t *rgbaRow = rgbaData + y * width * 4;
+        uint8_t *bgraRow = bgraData + y * bytesPerRow;
+        for (int x = 0; x < width; x++) {
+            size_t pixelIndex = x * 4;
+            bgraRow[pixelIndex]     = rgbaRow[pixelIndex + 2]; // Blue
+            bgraRow[pixelIndex + 1] = rgbaRow[pixelIndex + 1]; // Green
+            bgraRow[pixelIndex + 2] = rgbaRow[pixelIndex];     // Red
+            bgraRow[pixelIndex + 3] = rgbaRow[pixelIndex + 3]; // Alpha
+        }
+    }
     
     CVPixelBufferUnlockBaseAddress(pixelBuffer, 0);
 
