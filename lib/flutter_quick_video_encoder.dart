@@ -37,8 +37,12 @@ class FlutterQuickVideoEncoder {
   static int audioChannels = 0;
   static int sampleRate = 0;
 
+  // log level
+  static LogLevel logLevel = LogLevel.standard;
+
   /// set log level
   static Future<void> setLogLevel(LogLevel level) async {
+    logLevel = level;
     return await _invokeMethod('setLogLevel', {'log_level': level.index});
   }
 
@@ -110,6 +114,25 @@ class FlutterQuickVideoEncoder {
   }
 
   static Future<T?> _invokeMethod<T>(String method, [dynamic arguments]) async {
-    return await _channel.invokeMethod(method, arguments);
+    // log args
+    if (logLevel.index >= LogLevel.standard.index) {
+      if (method == "appendVideoFrame") {
+        print("[FQVE] '<$method>' rawRgba: ${arguments['rawRgba'].length} bytes");
+      } else if (method == "appendAudioFrame") {
+        print("[FQVE] '<$method>' rawPcm: ${arguments['rawPcm'].length} bytes");
+      } else {
+        print("[FQVE] '<$method>' args: $arguments");
+      }
+    }
+
+    // invoke
+    var result = await _channel.invokeMethod(method, arguments);
+
+    // log result
+    if (logLevel.index >= LogLevel.standard.index) {
+      print("[FQVE] <$method> result: $result");
+    }
+
+    return result;
   }
 }

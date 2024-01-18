@@ -61,12 +61,16 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 {
     @try
     {
+        if (self.mLogLevel >= standard) {
+            NSLog(@"handleMethodCall: %@", call.method);
+        }
+
         if ([@"setLogLevel" isEqualToString:call.method])
         {
             NSDictionary *args = (NSDictionary*)call.arguments;
-            NSNumber *logLevelNumber  = args[@"log_level"];
+            NSNumber *nLogLevel  = args[@"log_level"];
 
-            self.mLogLevel = (LogLevel)[logLevelNumber integerValue];
+            self.mLogLevel = (LogLevel) nLogLevel.integerValue;
 
             result(@(true));
         }
