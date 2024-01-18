@@ -248,6 +248,12 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 [[NSRunLoop currentRunLoop] runUntilDate:maxDate];
             }
 
+            // wait until ready
+            while (CMSampleBufferDataIsReady(sampleBuffer) == FALSE) {
+                NSDate *maxDate = [NSDate dateWithTimeIntervalSinceNow:0.1];
+                [[NSRunLoop currentRunLoop] runUntilDate:maxDate];
+            }
+
             // Append the sample buffer
             if (![self.mVideoInput appendSampleBuffer:sampleBuffer]) {
                 NSError *error = self.mAssetWriter.error;
@@ -316,6 +322,12 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
             // wait until ready
             while (self.mAudioInput.readyForMoreMediaData == FALSE) {
+                NSDate *maxDate = [NSDate dateWithTimeIntervalSinceNow:0.1];
+                [[NSRunLoop currentRunLoop] runUntilDate:maxDate];
+            }
+
+            // wait until ready
+            while (CMSampleBufferDataIsReady(sampleBuffer) == FALSE) {
                 NSDate *maxDate = [NSDate dateWithTimeIntervalSinceNow:0.1];
                 [[NSRunLoop currentRunLoop] runUntilDate:maxDate];
             }
@@ -410,13 +422,19 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
 
 CMSampleBufferRef createVideoSampleBuffer(int fps, int frameIdx, int width, int height, NSData *videoFrameData)
 {
+#if TARGET_OS_IOS
+    NSDictionary *attributes = @{(id)kCVPixelBufferIOSurfacePropertiesKey: @{}};
+#else
+    NSDictionary *attributes = NULL;
+#endif
+
     CVPixelBufferRef pixelBuffer = NULL;
     CVReturn cvReturn = CVPixelBufferCreate(
                             kCFAllocatorDefault,
                             width,
                             height,
                             kCVPixelFormatType_32BGRA,
-                            NULL, // cvPixelBufferAtttributes
+                            (__bridge CFDictionaryRef) attributes,
                             &pixelBuffer);
     
     if (cvReturn != kCVReturnSuccess) {
