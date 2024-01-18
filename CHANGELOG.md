@@ -1,3 +1,6 @@
+## 1.1.0
+* **[Fix]** iOS: needed to set `kCVPixelBufferIOSurfacePropertiesKey`
+
 ## 1.0.4
 * **[Fix]** iOS: must convert RGBA to BGRA
 
