@@ -1,3 +1,6 @@
+## 1.1.1
+* **[Improve]** clear encoding params after `finish` is called, not before
+
 ## 1.1.0
 * **[Fix]** iOS: needed to set `kCVPixelBufferIOSurfacePropertiesKey`
 
