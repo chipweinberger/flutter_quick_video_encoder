@@ -96,12 +96,15 @@ class FlutterQuickVideoEncoder {
 
   /// finish writing the video file
   static Future<void> finish() async {
-    width = 0;
-    height = 0;
-    fps = 0;
-    audioChannels = 0;
-    sampleRate = 0;
-    return await _invokeMethod('finish');
+    try {
+      await _invokeMethod('finish');
+    } finally {
+      width = 0;
+      height = 0;
+      fps = 0;
+      audioChannels = 0;
+      sampleRate = 0;
+    }
   }
 
   // create output directory
