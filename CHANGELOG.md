@@ -1,3 +1,6 @@
+## 1.2.0
+* **[Feature]** add support for audio-only
+
 ## 1.1.1
 * **[Improve]** clear encoding params after `finish` is called, not before
 
