@@ -10,6 +10,12 @@ void main() {
   runApp(MyApp());
 }
 
+enum ExportMode {
+  videoAndAudio,
+  videoOnly,
+  audioOnly,
+}
+
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -29,7 +35,7 @@ class _FqveAppState extends State<FqveApp> {
   static const int width = 1280;
   static const int height = 720;
   static const int fps = 30;
-  static const int audioChannels = 2;
+  static const int audioChannels = 1;
   static const int sampleRate = 44100;
 
   BuildContext? _context;
@@ -100,36 +106,71 @@ class _FqveAppState extends State<FqveApp> {
     return byteData.buffer.asUint8List();
   }
 
-  Future<void> exportVideo() async {
+  Future<void> export({required ExportMode mode}) async {
     try {
       Directory appDir = await getApplicationDocumentsDirectory();
-      var filepath = "${appDir.path}/exportedVideo.mp4";
 
-      await FlutterQuickVideoEncoder.setup(
-        width: width,
-        height: height,
-        fps: fps,
-        videoBitrate: 1000000,
-        profileLevel: ProfileLevel.any,
-        audioBitrate: 64000,
-        audioChannels: audioChannels,
-        sampleRate: sampleRate,
-        filepath: filepath,
-      );
+      // setup
+      if (mode == ExportMode.audioOnly) {
+        await FlutterQuickVideoEncoder.setup(
+          width: 0,
+          height: 0,
+          fps: fps,
+          videoBitrate: 0,
+          profileLevel: ProfileLevel.any,
+          audioBitrate: 64000,
+          audioChannels: audioChannels,
+          sampleRate: sampleRate,
+          filepath: '${appDir.path}/exportAudioOnly.m4a',
+        );
+      } else if (mode == ExportMode.videoOnly) {
+        await FlutterQuickVideoEncoder.setup(
+          width: width,
+          height: height,
+          fps: fps,
+          videoBitrate: 1000000,
+          profileLevel: ProfileLevel.any,
+          audioBitrate: 0,
+          audioChannels: 0,
+          sampleRate: 0,
+          filepath: '${appDir.path}/exportVideoOnly.mp4',
+        );
+      } else {
+        await FlutterQuickVideoEncoder.setup(
+          width: width,
+          height: height,
+          fps: fps,
+          videoBitrate: 1000000,
+          profileLevel: ProfileLevel.any,
+          audioBitrate: 64000,
+          audioChannels: audioChannels,
+          sampleRate: sampleRate,
+          filepath: '${appDir.path}/exportVideoAndAudio.mp4',
+        );
+      }
 
       int totalFrames = 120;
       for (int i = 0; i < totalFrames; i++) {
-        Uint8List frameData = await _generateVideoFrame(i);
-        Uint8List audioData = _generateAudioFrame(i);
-        await FlutterQuickVideoEncoder.appendVideoFrame(frameData);
-        await FlutterQuickVideoEncoder.appendAudioFrame(audioData);
+        if (mode == ExportMode.videoOnly || mode == ExportMode.videoAndAudio) {
+          Uint8List frameData = await _generateVideoFrame(i);
+          await FlutterQuickVideoEncoder.appendVideoFrame(frameData);
+        }
+        if (mode == ExportMode.audioOnly || mode == ExportMode.videoAndAudio) {
+          Uint8List audioData = _generateAudioFrame(i);
+          await FlutterQuickVideoEncoder.appendAudioFrame(audioData);
+        }
+        // hack: iOS & macOS export clicking noises if you append audio-only too fast
+        if (mode == ExportMode.audioOnly && (Platform.isIOS || Platform.isMacOS)) {
+          await Future.delayed(Duration(milliseconds: 10));
+        }
         setState(() {
           progress = (i + 1) / totalFrames;
         });
       }
 
       await FlutterQuickVideoEncoder.finish();
-      showSnackBar('Success: Video Exported: $filepath');
+
+      showSnackBar('Success: Video Exported: ${FlutterQuickVideoEncoder.filepath}');
     } catch (e) {
       showSnackBar('Error: $e');
     }
@@ -162,8 +203,22 @@ class _FqveAppState extends State<FqveApp> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     ElevatedButton(
-                      onPressed: exportVideo,
-                      child: Text('Export Test Video'),
+                      onPressed: () {
+                        export(mode: ExportMode.videoAndAudio);
+                      },
+                      child: Text('Export Video & Audio'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        export(mode: ExportMode.videoOnly);
+                      },
+                      child: Text('Export Video Only'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        export(mode: ExportMode.audioOnly);
+                      },
+                      child: Text('Export Audio Only'),
                     ),
                     Padding(
                       padding: const EdgeInsets.all(32.0),

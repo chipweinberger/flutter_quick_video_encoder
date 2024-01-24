@@ -128,60 +128,69 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 return;
             }
 
-            // Video compression settings
-            NSMutableDictionary *compressionProperties = [NSMutableDictionary dictionaryWithDictionary:@{
-                AVVideoAverageBitRateKey : @(nVideoBitrate.integerValue)
-            }];
+            // setup video?
+            if (self.width != 0 && self.height != 0) {
 
-            // Add profile level only if it's not 'any'
-            if (![nProfileLevel isEqualToString:@"any"]) {
-                NSString *profileLevelValue = [self parseProfileLevel:nProfileLevel];
-                [compressionProperties setObject:profileLevelValue forKey:AVVideoProfileLevelKey];
+                // Video compression settings
+                NSMutableDictionary *compressionProperties = [NSMutableDictionary dictionaryWithDictionary:@{
+                    AVVideoAverageBitRateKey : @(nVideoBitrate.integerValue)
+                }];
+
+                // Add profile level only if it's not 'any'
+                if (![nProfileLevel isEqualToString:@"any"]) {
+                    NSString *profileLevelValue = [self parseProfileLevel:nProfileLevel];
+                    [compressionProperties setObject:profileLevelValue forKey:AVVideoProfileLevelKey];
+                }
+
+                // Video settings
+                NSDictionary *videoSettings = @{
+                    AVVideoCodecKey : AVVideoCodecTypeH264,
+                    AVVideoWidthKey : @(self.width),
+                    AVVideoHeightKey : @(self.height),
+                    AVVideoCompressionPropertiesKey : compressionProperties
+                };
+
+                // Initialize video input
+                self.mVideoInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeVideo
+                                                                outputSettings:videoSettings];
+                self.mVideoInput.expectsMediaDataInRealTime = YES;
+
+                // Add video input to asset writer
+                if (![self.mAssetWriter canAddInput:self.mVideoInput]) {
+                    result([FlutterError errorWithCode:@"VideoInputAdditionError" 
+                                            message:@"Unable to add video input to AVAssetWriter" 
+                                            details:nil]);
+                    return;
+                }
+
+                [self.mAssetWriter addInput:self.mVideoInput];
             }
 
-            // Video settings
-            NSDictionary *videoSettings = @{
-                AVVideoCodecKey : AVVideoCodecTypeH264,
-                AVVideoWidthKey : @(self.width),
-                AVVideoHeightKey : @(self.height),
-                AVVideoCompressionPropertiesKey : compressionProperties
-            };
+            // setup audio?
+            if (self.audioChannels != 0 && self.sampleRate != 0) {
 
-            // Initialize video input
-            self.mVideoInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeVideo
-                                                            outputSettings:videoSettings];
-            self.mVideoInput.expectsMediaDataInRealTime = YES;
+                // Audio settings
+                NSDictionary* audioSettings = @{
+                    AVFormatIDKey : @(kAudioFormatMPEG4AAC),
+                    AVSampleRateKey : @(self.sampleRate),
+                    AVNumberOfChannelsKey: @(nAudioChannels.integerValue),
+                    AVEncoderBitRateKey: @(nAudioBitrate.integerValue)
+                };
 
-            // Add video input to asset writer
-            if (![self.mAssetWriter canAddInput:self.mVideoInput]) {
-                result([FlutterError errorWithCode:@"VideoInputAdditionError" 
-                                           message:@"Unable to add video input to AVAssetWriter" 
-                                           details:nil]);
-                return;
+                // Initialize audio input
+                self.mAudioInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio
+                                                                outputSettings:audioSettings];
+                self.mAudioInput.expectsMediaDataInRealTime = NO;
+
+                // Add audio input to asset writer
+                if (![self.mAssetWriter canAddInput:self.mAudioInput]) {
+                    result([FlutterError errorWithCode:@"AudioInputAdditionError" 
+                                            message:@"Unable to add audio input to AVAssetWriter" 
+                                            details:nil]);
+                    return;
+                }
+                [self.mAssetWriter addInput:self.mAudioInput];
             }
-            [self.mAssetWriter addInput:self.mVideoInput];
-
-            // Audio settings
-            NSDictionary* audioSettings = @{
-                AVFormatIDKey : @(kAudioFormatMPEG4AAC),
-                AVSampleRateKey : @(self.sampleRate),
-                AVNumberOfChannelsKey: @(nAudioChannels.integerValue),
-                AVEncoderBitRateKey: @(nAudioBitrate.integerValue)
-            };
-
-            // Initialize audio input
-            self.mAudioInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio
-                                                            outputSettings:audioSettings];
-            self.mAudioInput.expectsMediaDataInRealTime = NO;
-
-            // Add audio input to asset writer
-            if (![self.mAssetWriter canAddInput:self.mAudioInput]) {
-                result([FlutterError errorWithCode:@"AudioInputAdditionError" 
-                                           message:@"Unable to add audio input to AVAssetWriter" 
-                                           details:nil]);
-                return;
-            }
-            [self.mAssetWriter addInput:self.mAudioInput];
 
             // Check status
             if (self.mAssetWriter.status == AVAssetWriterStatusFailed) {

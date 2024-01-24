@@ -77,57 +77,75 @@ public class FlutterQuickVideoEncoderPlugin implements
                     mVideoFrameIdx = 0;
                     mAudioFrameIdx = 0;
 
-                    // color format
-                    int colorFormat = getColorFormat();
-                    if (isColorFormatSupported("video/avc", colorFormat) == false) {
-                        result.error("UnsupportedColorFormat", "YUV420Planar is not supported", null);
-                        return;
-                    }
-
-                    // check audio support
-                    int audioProfile = MediaCodecInfo.CodecProfileLevel.AACObjectLC;
-                    if (!isAudioFormatSupported(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioProfile)) {
-                        result.error("UnsupportedAudioFormat", "AAC audio is not supported", null);
-                        return;
-                    }
-
-                    // Video format
-                    MediaFormat videoFormat = MediaFormat.createVideoFormat("video/avc", width, height);
-                    videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
-                    videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
-                    videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
-                    videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-                    
-                    // Video encoder
-                    mVideoEncoder = MediaCodec.createEncoderByType("video/avc");
-                    mVideoEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-
-                    // Audio format
-                    MediaFormat audioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioChannels);
-                    audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
-                    audioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, audioProfile);
-
-                    // Audio encoder
-                    mAudioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
-                    mAudioEncoder.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-                    
                     // Initialize the MediaMuxer
                     mMediaMuxer = new MediaMuxer(filepath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-                    mVideoTrackIndex = mMediaMuxer.addTrack(mVideoEncoder.getOutputFormat());
-                    mAudioTrackIndex = mMediaMuxer.addTrack(mAudioEncoder.getOutputFormat());
 
-                    try {
-                        mVideoEncoder.start();
-                    } catch (Exception e) {
-                        result.error("Hardware", "Could not start video encoder. Check logs.", null);
-                        return;
+                    // setup video?
+                    if (width != 0 && height != 0) {
+
+                        // color format
+                        int colorFormat = getColorFormat();
+                        if (isColorFormatSupported("video/avc", colorFormat) == false) {
+                            result.error("UnsupportedColorFormat", "YUV420Planar is not supported", null);
+                            return;
+                        }
+
+                        // check audio support
+                        int audioProfile = MediaCodecInfo.CodecProfileLevel.AACObjectLC;
+                        if (!isAudioFormatSupported(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioProfile)) {
+                            result.error("UnsupportedAudioFormat", "AAC audio is not supported", null);
+                            return;
+                        }
+
+                        // Video format
+                        MediaFormat videoFormat = MediaFormat.createVideoFormat("video/avc", width, height);
+                        videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
+                        videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
+                        videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
+                        videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+                        
+                        // Video encoder
+                        mVideoEncoder = MediaCodec.createEncoderByType("video/avc");
+                        mVideoEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+
+                        // add track
+                        mVideoTrackIndex = mMediaMuxer.addTrack(mVideoEncoder.getOutputFormat());
                     }
 
-                    try {
-                        mAudioEncoder.start();
-                    } catch (Exception e) {
-                        result.error("Hardware", "Could not start audio encoder. Check logs.", null);
-                        return;
+                    // setup audio?
+                    if (audioChannels != 0 && sampleRate != 0) {
+
+                        // Audio format
+                        MediaFormat audioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioChannels);
+                        audioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
+                        audioFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, audioProfile);
+
+                        // Audio encoder
+                        mAudioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
+                        mAudioEncoder.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+
+                        // add track
+                        mAudioTrackIndex = mMediaMuxer.addTrack(mAudioEncoder.getOutputFormat());
+                    }
+
+                    // has video?
+                    if (width != 0 && height != 0) {
+                        try {
+                            mVideoEncoder.start();
+                        } catch (Exception e) {
+                            result.error("Hardware", "Could not start video encoder. Check logs.", null);
+                            return;
+                        }
+                    }
+
+                    // has audio?
+                    if (audioChannels != 0 && sampleRate != 0) {
+                        try {
+                            mAudioEncoder.start();
+                        } catch (Exception e) {
+                            result.error("Hardware", "Could not start audio encoder. Check logs.", null);
+                            return;
+                        }
                     }
 
                     try {

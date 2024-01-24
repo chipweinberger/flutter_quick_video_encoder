@@ -36,6 +36,7 @@ class FlutterQuickVideoEncoder {
   static int fps = 0;
   static int audioChannels = 0;
   static int sampleRate = 0;
+  static String filepath = '';
 
   // log level
   static LogLevel logLevel = LogLevel.standard;
@@ -63,6 +64,7 @@ class FlutterQuickVideoEncoder {
     FlutterQuickVideoEncoder.fps = fps;
     FlutterQuickVideoEncoder.audioChannels = audioChannels;
     FlutterQuickVideoEncoder.sampleRate = sampleRate;
+    FlutterQuickVideoEncoder.filepath = filepath;
     return await _invokeMethod('setup', {
       'width': width,
       'height': height,
