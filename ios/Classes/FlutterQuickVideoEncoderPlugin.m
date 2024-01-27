@@ -180,7 +180,7 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 // Initialize audio input
                 self.mAudioInput = [[AVAssetWriterInput alloc] initWithMediaType:AVMediaTypeAudio
                                                                 outputSettings:audioSettings];
-                self.mAudioInput.expectsMediaDataInRealTime = NO;
+                self.mAudioInput.expectsMediaDataInRealTime = YES;
 
                 // Add audio input to asset writer
                 if (![self.mAssetWriter canAddInput:self.mAudioInput]) {

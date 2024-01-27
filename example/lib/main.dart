@@ -159,9 +159,9 @@ class _FqveAppState extends State<FqveApp> {
           Uint8List audioData = _generateAudioFrame(i);
           await FlutterQuickVideoEncoder.appendAudioFrame(audioData);
         }
-        // hack: iOS & macOS export clicking noises if you append audio-only too fast
+        // hack: going too fast causes clicking noises for some reason
         if (mode == ExportMode.audioOnly && (Platform.isIOS || Platform.isMacOS)) {
-          await Future.delayed(Duration(milliseconds: 10));
+          await Future.delayed(Duration(milliseconds: 1));
         }
         setState(() {
           progress = (i + 1) / totalFrames;
