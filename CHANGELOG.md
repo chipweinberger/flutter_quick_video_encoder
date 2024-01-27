@@ -1,3 +1,6 @@
+## 1.2.1
+* **[Fix]** iOS: mostly fixes clicking noises by using `audioWriterInput.expectsMediaDataInRealTime`
+
 ## 1.2.0
 * **[Feature]** add support for audio-only
 
