@@ -5,6 +5,7 @@ import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
+import android.util.Log;
 
 import java.nio.ByteBuffer;
 import java.io.PrintWriter;
@@ -90,13 +91,6 @@ public class FlutterQuickVideoEncoderPlugin implements
                             return;
                         }
 
-                        // check audio support
-                        int audioProfile = MediaCodecInfo.CodecProfileLevel.AACObjectLC;
-                        if (!isAudioFormatSupported(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioProfile)) {
-                            result.error("UnsupportedAudioFormat", "AAC audio is not supported", null);
-                            return;
-                        }
-
                         // Video format
                         MediaFormat videoFormat = MediaFormat.createVideoFormat("video/avc", width, height);
                         videoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
@@ -114,6 +108,13 @@ public class FlutterQuickVideoEncoderPlugin implements
 
                     // setup audio?
                     if (audioChannels != 0 && sampleRate != 0) {
+
+                        // check audio support
+                        int audioProfile = MediaCodecInfo.CodecProfileLevel.AACObjectLC;
+                        if (!isAudioFormatSupported(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioProfile)) {
+                            result.error("UnsupportedAudioFormat", "AAC audio is not supported", null);
+                            return;
+                        }
 
                         // Audio format
                         MediaFormat audioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, audioChannels);
@@ -160,12 +161,12 @@ public class FlutterQuickVideoEncoderPlugin implements
 
                     break;
                 }
-                case "addVideoFrame":
+                case "appendVideoFrame":
                 {
-                    ByteBuffer rawRgba = ((ByteBuffer) call.argument("rawRgba"));
+                    byte[] rawRgba = ((byte[]) call.argument("rawRgba"));
 
                     // convert to yuv420
-                    byte[] yuv420 = rgbaToYuv420Planar(rawRgba.array(), mWidth, mHeight);
+                    byte[] yuv420 = rgbaToYuv420Planar(rawRgba, mWidth, mHeight);
 
                     // time
                     long presentationTime = mVideoFrameIdx * 1000000000L / mFps;
@@ -201,18 +202,32 @@ public class FlutterQuickVideoEncoderPlugin implements
                 }
                 case "appendAudioFrame":
                 {
-                    ByteBuffer rawPcm = ((ByteBuffer) call.argument("rawPcm"));
+                    byte[] rawPcmArray = ((byte[]) call.argument("rawPcm"));
+                    ByteBuffer rawPcm  = ByteBuffer.wrap(rawPcmArray);
 
-                    // time
-                    long presentationTime = mAudioFrameIdx * 1000000000L / mFps;
+                    // push data to encoder
+                    int offset = 0;
+                    while (offset < rawPcmArray.length) {
+                        int inIdx = mAudioEncoder.dequeueInputBuffer(-1);
+                        if (inIdx >= 0) {
+                            ByteBuffer buf = mAudioEncoder.getInputBuffer(inIdx);
+                            buf.clear();
 
-                    // feed encoder
-                    int inIdx = mAudioEncoder.dequeueInputBuffer(-1);
-                    if (inIdx >= 0) {
-                        ByteBuffer buf = mAudioEncoder.getInputBuffer(inIdx);
-                        buf.clear();
-                        buf.put(rawPcm);
-                        mAudioEncoder.queueInputBuffer(inIdx, 0, rawPcm.capacity(), presentationTime, 0);
+                            // push as many bytes as the encoder allows
+                            int remaining = buf.remaining();
+                            int toWrite = Math.min(rawPcmArray.length - offset, remaining);
+                            buf.put(rawPcmArray, offset, toWrite);
+
+                            // time
+                            long beginTime = mAudioFrameIdx * 1000000000L / mFps;
+                            long duration = 1000000000L / mFps;
+                            long presentationTime = beginTime + (duration * offset) / rawPcmArray.length;
+
+                            // queue
+                            mAudioEncoder.queueInputBuffer(inIdx, 0, toWrite, presentationTime, 0);
+
+                            offset += toWrite; 
+                        }
                     }
 
                     // retrieve encoded data & feed muxer
@@ -230,19 +245,29 @@ public class FlutterQuickVideoEncoderPlugin implements
                     result.success(null);
                     break;
                 }
+
                 case "finish":
                 {
                     // flush video encoder
-                    mVideoEncoder.stop();
-                    mVideoEncoder.release();
+                    if (mVideoEncoder != null) {
+                        mVideoEncoder.stop();
+                        mVideoEncoder.release();
+                        mVideoEncoder = null;
+                    }
 
                     // flush audio encoder
-                    mAudioEncoder.stop();
-                    mAudioEncoder.release();
+                    if (mAudioEncoder != null) {
+                        mAudioEncoder.stop();
+                        mAudioEncoder.release();
+                        mAudioEncoder = null;
+                    }
 
                     // close muxer
-                    mMediaMuxer.stop();
-                    mMediaMuxer.release();
+                    if (mMediaMuxer != null) {
+                        //mMediaMuxer.stop();
+                        //mMediaMuxer.release();
+                        mMediaMuxer = null; 
+                    }
 
                     result.success(null);
 

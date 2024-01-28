@@ -160,8 +160,10 @@ class _FqveAppState extends State<FqveApp> {
           await FlutterQuickVideoEncoder.appendAudioFrame(audioData);
         }
         // hack: going too fast causes clicking noises for some reason
-        if (mode == ExportMode.audioOnly && (Platform.isIOS || Platform.isMacOS)) {
-          await Future.delayed(Duration(milliseconds: 1));
+        if (mode == ExportMode.audioOnly || mode == ExportMode.videoAndAudio) {
+          if (Platform.isIOS || Platform.isMacOS) {
+            await Future.delayed(Duration(milliseconds: 1));
+          }
         }
         setState(() {
           progress = (i + 1) / totalFrames;
@@ -170,7 +172,7 @@ class _FqveAppState extends State<FqveApp> {
 
       await FlutterQuickVideoEncoder.finish();
 
-      showSnackBar('Success: Video Exported: ${FlutterQuickVideoEncoder.filepath}');
+      showSnackBar('Export Success: ${FlutterQuickVideoEncoder.filepath}');
     } catch (e) {
       showSnackBar('Error: $e');
     }
