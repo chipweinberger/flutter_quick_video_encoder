@@ -1,3 +1,6 @@
+## 1.3.1
+* **[Pub]** update package description
+
 ## 1.3.0
 * **[Feature]** add android support
 
