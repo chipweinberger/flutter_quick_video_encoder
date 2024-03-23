@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_quick_video_encoder/flutter_quick_video_encoder.dart';
 
@@ -173,6 +174,8 @@ class _FqveAppState extends State<FqveApp> {
       await FlutterQuickVideoEncoder.finish();
 
       showSnackBar('Export Success: ${FlutterQuickVideoEncoder.filepath}');
+
+      await Share.shareXFiles([XFile(FlutterQuickVideoEncoder.filepath)]);
     } catch (e) {
       showSnackBar('Error: $e');
     }

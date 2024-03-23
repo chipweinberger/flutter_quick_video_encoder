@@ -13,8 +13,9 @@ dependencies:
     sdk: flutter
   flutter_quick_video_encoder:
     path: ../
-  path_provider: ^2.1.1
-  path: ^1.8.3
+  share_plus: 7.2.2
+  path_provider: ^2.1.2
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
