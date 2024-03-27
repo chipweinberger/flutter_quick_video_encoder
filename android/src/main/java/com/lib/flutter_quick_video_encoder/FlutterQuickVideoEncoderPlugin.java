@@ -233,6 +233,9 @@ public class FlutterQuickVideoEncoderPlugin implements
                     // drain encoder & feed muxer
                     drainEncoder(mAudioEncoder, false);
 
+                    // increment
+                    mAudioFrameIdx++;
+
                     result.success(null);
                     break;
                 }
