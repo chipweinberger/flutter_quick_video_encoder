@@ -1,3 +1,6 @@
+## 1.4.0
+* **[Fix]** android was not working
+
 ## 1.3.1
 * **[Pub]** update package description
 
