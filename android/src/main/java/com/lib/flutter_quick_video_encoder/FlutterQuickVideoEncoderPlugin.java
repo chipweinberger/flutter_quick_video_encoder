@@ -412,25 +412,24 @@ public class FlutterQuickVideoEncoderPlugin implements
         }
     }
 
-private void processQueues() {
-    for (int i = 0; i < 2; i++) {
-        Queue<EncodedData> queue = i == 0 ? videoQueue : audioQueue;
-        int trackIndex = i == 0 ? mVideoTrackIndex : mAudioTrackIndex;
-        while (!queue.isEmpty()) {
-            EncodedData data = queue.poll(); // Retrieve and remove the head of the queue
-            ByteBuffer byteBuffer = data.byteBuffer;
-            MediaCodec.BufferInfo bufferInfo = data.bufferInfo;
+    private void processQueues() {
+        for (int i = 0; i < 2; i++) {
+            Queue<EncodedData> queue = i == 0 ? videoQueue : audioQueue;
+            int trackIndex = i == 0 ? mVideoTrackIndex : mAudioTrackIndex;
+            while (!queue.isEmpty()) {
+                EncodedData data = queue.poll(); // Retrieve and remove the head of the queue
+                ByteBuffer byteBuffer = data.byteBuffer;
+                MediaCodec.BufferInfo bufferInfo = data.bufferInfo;
 
-            byteBuffer.position(bufferInfo.offset);
-            byteBuffer.limit(bufferInfo.offset + bufferInfo.size);
-            mMediaMuxer.writeSampleData(trackIndex, byteBuffer, bufferInfo); // Write data to the MediaMuxer
+                byteBuffer.position(bufferInfo.offset);
+                byteBuffer.limit(bufferInfo.offset + bufferInfo.size);
+                mMediaMuxer.writeSampleData(trackIndex, byteBuffer, bufferInfo); // Write data to the MediaMuxer
+            }
         }
     }
-}
-
 
     /**
-     * Extracts all pending data from the specified encoder.
+     * Extracts all pending data from the specified encoder & feed it to the muxer.
      *
      * @param encoder The MediaCodec encoder to drain.
      * @param trackIndex The muxer track index associated with this encoder.
