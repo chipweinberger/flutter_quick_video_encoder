@@ -28,6 +28,7 @@ public class FlutterQuickVideoEncoderPlugin implements
     private int mWidth;
     private int mHeight;
     private int mFps;
+    private boolean mMuxerStarted;
     private MediaCodec mVideoEncoder;
     private MediaCodec mAudioEncoder;
     private MediaMuxer mMediaMuxer;
@@ -77,12 +78,17 @@ public class FlutterQuickVideoEncoderPlugin implements
                     // reset
                     mVideoFrameIdx = 0;
                     mAudioFrameIdx = 0;
+                    mMuxerStarted = false;
+
+                    Log.i(TAG, "new MediaMuxer");
 
                     // Initialize the MediaMuxer
                     mMediaMuxer = new MediaMuxer(filepath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
 
                     // setup video?
                     if (width != 0 && height != 0) {
+
+                        Log.i(TAG, "new getColorFormat");
 
                         // color format
                         int colorFormat = getColorFormat();
@@ -100,10 +106,18 @@ public class FlutterQuickVideoEncoderPlugin implements
                         
                         // Video encoder
                         mVideoEncoder = MediaCodec.createEncoderByType("video/avc");
+
+                        Log.i(TAG, "configure");
+
                         mVideoEncoder.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
 
-                        // add track
-                        mVideoTrackIndex = mMediaMuxer.addTrack(mVideoEncoder.getOutputFormat());
+                        // start
+                        try {
+                            mVideoEncoder.start();
+                        } catch (Exception e) {
+                            result.error("Hardware", "Could not start video encoder. Check logs.", null);
+                            return;
+                        }
                     }
 
                     // setup audio?
@@ -125,35 +139,13 @@ public class FlutterQuickVideoEncoderPlugin implements
                         mAudioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
                         mAudioEncoder.configure(audioFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
 
-                        // add track
-                        mAudioTrackIndex = mMediaMuxer.addTrack(mAudioEncoder.getOutputFormat());
-                    }
-
-                    // has video?
-                    if (width != 0 && height != 0) {
-                        try {
-                            mVideoEncoder.start();
-                        } catch (Exception e) {
-                            result.error("Hardware", "Could not start video encoder. Check logs.", null);
-                            return;
-                        }
-                    }
-
-                    // has audio?
-                    if (audioChannels != 0 && sampleRate != 0) {
+                        // start
                         try {
                             mAudioEncoder.start();
                         } catch (Exception e) {
                             result.error("Hardware", "Could not start audio encoder. Check logs.", null);
                             return;
                         }
-                    }
-
-                    try {
-                        mMediaMuxer.start();
-                    } catch (Exception e) {
-                        result.error("Hardware", "Could not start media muxer. Check logs.", null);
-                        return;
                     }
 
                     // success
@@ -169,7 +161,7 @@ public class FlutterQuickVideoEncoderPlugin implements
                     byte[] yuv420 = rgbaToYuv420Planar(rawRgba, mWidth, mHeight);
 
                     // time
-                    long presentationTime = mVideoFrameIdx * 1000000000L / mFps;
+                    long presentationTime = mVideoFrameIdx * 1000000L / mFps;
 
                     // feed encoder
                     int inIdx = mVideoEncoder.dequeueInputBuffer(-1);
@@ -180,17 +172,8 @@ public class FlutterQuickVideoEncoderPlugin implements
                         mVideoEncoder.queueInputBuffer(inIdx, 0, yuv420.length, presentationTime, 0);
                     }
 
-                    // retrieve encoded data & feed muxer
-                    MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-                    int outIdx = mVideoEncoder.dequeueOutputBuffer(bufferInfo, 0);
-                    while (outIdx >= 0) {
-                        ByteBuffer buf = mVideoEncoder.getOutputBuffer(outIdx);
-                        if (bufferInfo.flags != MediaCodec.BUFFER_FLAG_CODEC_CONFIG) {
-                            mMediaMuxer.writeSampleData(mVideoTrackIndex, buf, bufferInfo);
-                        }
-                        mVideoEncoder.releaseOutputBuffer(outIdx, false);
-                        outIdx = mVideoEncoder.dequeueOutputBuffer(bufferInfo, 0);
-                    }
+                    // drain ecoder & feed muxer
+                    drainEncoder(mVideoEncoder, mVideoTrackIndex, false);
 
                     // increment
                     mVideoFrameIdx++;
@@ -205,7 +188,7 @@ public class FlutterQuickVideoEncoderPlugin implements
                     byte[] rawPcmArray = ((byte[]) call.argument("rawPcm"));
                     ByteBuffer rawPcm  = ByteBuffer.wrap(rawPcmArray);
 
-                    // push data to encoder
+                    // feed encoder
                     int offset = 0;
                     while (offset < rawPcmArray.length) {
                         int inIdx = mAudioEncoder.dequeueInputBuffer(-1);
@@ -230,17 +213,8 @@ public class FlutterQuickVideoEncoderPlugin implements
                         }
                     }
 
-                    // retrieve encoded data & feed muxer
-                    MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-                    int outIdx = mAudioEncoder.dequeueOutputBuffer(bufferInfo, 0);
-                    while (outIdx >= 0) {
-                        ByteBuffer buf = mAudioEncoder.getOutputBuffer(outIdx);
-                        if (bufferInfo.flags != MediaCodec.BUFFER_FLAG_CODEC_CONFIG) {
-                            mMediaMuxer.writeSampleData(mAudioTrackIndex, buf, bufferInfo);
-                        }
-                        mAudioEncoder.releaseOutputBuffer(outIdx, false);
-                        outIdx = mAudioEncoder.dequeueOutputBuffer(bufferInfo, 0);
-                    }
+                    // drain encoder & feed muxer
+                    drainEncoder(mAudioEncoder, mAudioTrackIndex, false);
 
                     result.success(null);
                     break;
@@ -248,6 +222,16 @@ public class FlutterQuickVideoEncoderPlugin implements
 
                 case "finish":
                 {
+                    // wait for encoding
+                    if (mVideoEncoder != null) {
+                        drainEncoder(mVideoEncoder, mVideoTrackIndex, true);
+                    }
+
+                    // wait for encoding
+                    if (mAudioEncoder != null) {
+                        drainEncoder(mAudioEncoder, mAudioTrackIndex, true);
+                    }
+
                     // flush video encoder
                     if (mVideoEncoder != null) {
                         mVideoEncoder.stop();
@@ -264,8 +248,8 @@ public class FlutterQuickVideoEncoderPlugin implements
 
                     // close muxer
                     if (mMediaMuxer != null) {
-                        //mMediaMuxer.stop();
-                        //mMediaMuxer.release();
+                        mMediaMuxer.stop();
+                        mMediaMuxer.release();
                         mMediaMuxer = null; 
                     }
 
@@ -382,10 +366,92 @@ public class FlutterQuickVideoEncoderPlugin implements
 
     @SuppressWarnings({"deprecation"})
     private int getColorFormat() {
-        if (android.os.Build.VERSION.SDK_INT >= 23) {
-            return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible;
-        } else {
-            return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
+        return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
+    }
+
+    private void signalEndOfStream(MediaCodec encoder) {
+        try {
+            int inputBufferIndex = encoder.dequeueInputBuffer(-1);
+            if (inputBufferIndex >= 0) {
+                // No data, but signal end of stream through the buffer flag.
+                encoder.queueInputBuffer(inputBufferIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error signaling end of stream: ", e);
+            // Handle error
+        }
+    }
+
+    /**
+     * Extracts all pending data from the specified encoder.
+     *
+     * @param encoder The MediaCodec encoder to drain.
+     * @param trackIndex The muxer track index associated with this encoder.
+     * @param endOfStream If true, signals end-of-stream to the encoder.
+     */
+    private void drainEncoder(MediaCodec encoder, int trackIndex, boolean endOfStream) {
+        final int TIMEOUT_USEC = 10000;
+        if (endOfStream) {
+            signalEndOfStream(encoder);
+        }
+
+        MediaCodec.BufferInfo mBufferInfo = new MediaCodec.BufferInfo();
+
+        while (true) {
+            int encoderStatus = encoder.dequeueOutputBuffer(mBufferInfo, TIMEOUT_USEC);
+
+            if (encoderStatus == MediaCodec.INFO_TRY_AGAIN_LATER)
+            {
+                if (!endOfStream) {
+                    break; // Exit the loop if not EOS
+                }
+
+            } 
+            else if (encoderStatus == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED)
+            {
+                // Output format changed, should only happen once before output buffers are received.
+                if (mMuxerStarted) {
+                    throw new RuntimeException("format changed twice");
+                }
+                MediaFormat newFormat = encoder.getOutputFormat();
+                trackIndex = mMediaMuxer.addTrack(newFormat);
+                if (!mMuxerStarted) {
+                    mMediaMuxer.start();
+                    mMuxerStarted = true;
+                }
+            }
+            else if (encoderStatus < 0)
+            {
+                // Ignore unexpected status.
+            } 
+            else 
+            {
+                ByteBuffer encodedData = encoder.getOutputBuffer(encoderStatus);
+                if (encodedData == null) {
+                    throw new RuntimeException("encoderOutputBuffer " + encoderStatus + " was null");
+                }
+
+                if ((mBufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                    // Ignore codec config data.
+                    mBufferInfo.size = 0;
+                }
+
+                if (mBufferInfo.size != 0) {
+                    if (!mMuxerStarted) {
+                        throw new RuntimeException("muxer hasn't started");
+                    }
+
+                    encodedData.position(mBufferInfo.offset);
+                    encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
+                    mMediaMuxer.writeSampleData(trackIndex, encodedData, mBufferInfo);
+                }
+
+                encoder.releaseOutputBuffer(encoderStatus, false);
+
+                if ((mBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                    break; // Break out of the loop if EOS is reached.
+                }
+            }
         }
     }
 }

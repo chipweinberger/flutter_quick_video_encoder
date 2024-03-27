@@ -150,7 +150,7 @@ class _FqveAppState extends State<FqveApp> {
         );
       }
 
-      int totalFrames = 120;
+      int totalFrames = 60;
       for (int i = 0; i < totalFrames; i++) {
         if (mode == ExportMode.videoOnly || mode == ExportMode.videoAndAudio) {
           Uint8List frameData = await _generateVideoFrame(i);
