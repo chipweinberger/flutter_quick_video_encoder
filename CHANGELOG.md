@@ -1,3 +1,6 @@
+## 1.4.1
+* **[Fix]** android must increment mAudioFrameIdx
+
 ## 1.4.0
 * **[Fix]** android was not working
 

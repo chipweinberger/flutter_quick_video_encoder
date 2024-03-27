@@ -1,6 +1,6 @@
 name: flutter_quick_video_encoder
 description: Encode raw RGB images to mp4 video using hardware h264 encoders. Also supports PCM audio & m4a files.
-version: 1.4.0
+version: 1.4.1
 homepage: https://github.com/chipweinberger/flutter_quick_video_encoder
 
 environment:
