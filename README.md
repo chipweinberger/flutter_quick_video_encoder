@@ -25,7 +25,7 @@ await FlutterQuickVideoEncoder.setup(
     audioChannels: 1,
     audioBitrate: 64000,
     sampleRate: 44100,
-    filepath: "/documents/video.mp4",
+    filepath: "/documents/video.mp4", // output file
 );
 for(int i = 0; i < frameCount; i++) {
     Uint8List rgba = _renderVideoFrame(i);  // your video function
