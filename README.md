@@ -10,7 +10,7 @@ Quickly encode raw RGB images & PCM audio to MP4 video using the system h264 enc
 
 FlutterQuickVideoEncoder has zero dependencies besides Flutter, Android, iOS, and MacOS themselves. No FFMPEG.
 
-We use **AVFoundation** on iOS and **MediaCodec** on Android. These are native libraries.
+We use **AVFoundation** on iOS and **MediaCodec** on Android. These are native system libraries.
 
 ## For encoding raw RGB pixels
 
