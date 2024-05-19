@@ -1,3 +1,6 @@
+## 1.5.0
+* **[Fix]** Android: Switch to `YUV420Flexible` to fix `YUV420Planar is not supported` error
+
 ## 1.4.1
 * **[Fix]** android must increment mAudioFrameIdx
 
