@@ -1,5 +1,6 @@
 package com.lib.flutter_quick_video_encoder;
 
+import android.media.Image;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -107,10 +108,10 @@ public class FlutterQuickVideoEncoderPlugin implements
                         // color format
                         int colorFormat = getColorFormat();
                         if (isColorFormatSupported("video/avc", colorFormat) == false) {
-                            result.error("UnsupportedColorFormat", "YUV420Planar is not supported", null);
+                            result.error("UnsupportedColorFormat", "COLOR_FormatYUV420Flexible is not supported", null);
                             return;
                         }
-
+                            
                         // Video format
                         Log.i(TAG, "calling MediaFormat.createVideoFormat()");
                         MediaFormat videoFormat = MediaFormat.createVideoFormat("video/avc", width, height);
@@ -175,7 +176,7 @@ public class FlutterQuickVideoEncoderPlugin implements
                     byte[] rawRgba = ((byte[]) call.argument("rawRgba"));
 
                     // convert to yuv420
-                    byte[] yuv420 = rgbaToYuv420Planar(rawRgba, mWidth, mHeight);
+                    byte[] yuv420 = rgbaToYuv420Flexible(rawRgba, mWidth, mHeight);
 
                     // time
                     long presentationTime = mVideoFrameIdx * 1000000L / mFps;
@@ -183,13 +184,19 @@ public class FlutterQuickVideoEncoderPlugin implements
                     // feed encoder
                     int inIdx = mVideoEncoder.dequeueInputBuffer(-1);
                     if (inIdx >= 0) {
-                        ByteBuffer buf = mVideoEncoder.getInputBuffer(inIdx);
-                        buf.clear();
-                        buf.put(yuv420);
-                        mVideoEncoder.queueInputBuffer(inIdx, 0, yuv420.length, presentationTime, 0);
+                        // get buffer size
+                        ByteBuffer buffer = mVideoEncoder.getInputBuffer(inIdx);
+                        int size = buffer.capacity();
+
+                        // fill image
+                        Image image = mVideoEncoder.getInputImage(inIdx);
+                        fillImage(image, yuv420, mWidth, mHeight);
+
+                        // queue buffer
+                        mVideoEncoder.queueInputBuffer(inIdx, 0, size, presentationTime, 0);
                     }
 
-                    // drain ecoder & feed muxer
+                    // drain encoder & feed muxer
                     drainEncoder(mVideoEncoder, false);
 
                     // increment
@@ -357,12 +364,12 @@ public class FlutterQuickVideoEncoderPlugin implements
         return null;
     }
 
-    private byte[] rgbaToYuv420Planar(byte[] rgba, int width, int height) {
+    private byte[] rgbaToYuv420Flexible(byte[] rgba, int width, int height) {
         final int frameSize = width * height;
 
         int yIndex = 0;
         int uIndex = frameSize;
-        int vIndex = frameSize + frameSize / 4;
+        int vIndex = frameSize + (frameSize / 4);
 
         byte[] yuv420 = new byte[width * height * 3 / 2];
 
@@ -389,9 +396,55 @@ public class FlutterQuickVideoEncoderPlugin implements
         return yuv420;
     }
 
-    @SuppressWarnings({"deprecation"})
+    private void fillImage(Image image, byte[] yuv420, int width, int height) {
+        Image.Plane[] planes = image.getPlanes();
+
+        // Fill Y plane
+        ByteBuffer yBuffer = planes[0].getBuffer();
+        int yRowStride = planes[0].getRowStride();
+        int yPixelStride = planes[0].getPixelStride();
+        int yOffset = 0;
+        for (int i = 0; i < height; i++) {
+            int yPos = i * yRowStride;
+            yBuffer.position(yPos);
+            for (int j = 0; j < width; j++) {
+                yBuffer.put(yPos + j * yPixelStride, yuv420[yOffset++]);
+            }
+        }
+
+        // Fill U plane
+        ByteBuffer uBuffer = planes[1].getBuffer();
+        int uRowStride = planes[1].getRowStride();
+        int uPixelStride = planes[1].getPixelStride();
+        int uHeight = height / 2;
+        int uWidth = width / 2;
+        int uOffset = width * height;
+        for (int i = 0; i < uHeight; i++) {
+            int uPos = i * uRowStride;
+            uBuffer.position(uPos);
+            for (int j = 0; j < uWidth; j++) {
+                uBuffer.put(uPos + j * uPixelStride, yuv420[uOffset++]);
+            }
+        }
+
+        // Fill V plane
+        ByteBuffer vBuffer = planes[2].getBuffer();
+        int vRowStride = planes[2].getRowStride();
+        int vPixelStride = planes[2].getPixelStride();
+        int vHeight = height / 2;
+        int vWidth = width / 2;
+        int vOffset = width * height + (width / 2) * (height / 2);
+        for (int i = 0; i < vHeight; i++) {
+            int vPos = i * vRowStride;
+            vBuffer.position(vPos);
+            for (int j = 0; j < vWidth; j++) {
+                vBuffer.put(vPos + j * vPixelStride, yuv420[vOffset++]);
+            }
+        }
+    }
+
     private int getColorFormat() {
-        return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar;
+        return MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible;
     }
 
     private void signalEndOfStream(MediaCodec encoder) {
