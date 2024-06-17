@@ -1,3 +1,6 @@
+## 1.5.1
+* **[Fix]** iOS: only call `markAsFinished` when needed
+
 ## 1.5.0
 * **[Fix]** Android: Switch to `YUV420Flexible` to fix `YUV420Planar is not supported` error
 
