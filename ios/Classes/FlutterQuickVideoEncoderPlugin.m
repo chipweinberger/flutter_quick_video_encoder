@@ -370,9 +370,16 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
                 return;
             }
 
-            // Mark the inputs as finished
-            [self.mAudioInput markAsFinished];
-            [self.mVideoInput markAsFinished];
+            // Mark audio as finished
+            if (self.audioChannels != 0 && self.sampleRate != 0) {
+                [self.mAudioInput markAsFinished];
+            }
+
+            // Mark video as finished
+            if (self.width != 0 && self.height != 0) {
+                [self.mVideoInput markAsFinished];
+            }
+            
 
             // Setup a dispatch group to wait for the finishWriting completion
             dispatch_group_t dispatchGroup = dispatch_group_create();
