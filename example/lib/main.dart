@@ -150,6 +150,8 @@ class _FqveAppState extends State<FqveApp> {
         );
       }
 
+      DateTime startTime = DateTime.now();
+
       int totalFrames = 60;
       for (int i = 0; i < totalFrames; i++) {
         if (mode == ExportMode.videoOnly || mode == ExportMode.videoAndAudio) {
@@ -173,7 +175,10 @@ class _FqveAppState extends State<FqveApp> {
 
       await FlutterQuickVideoEncoder.finish();
 
-      showSnackBar('Export Success: ${FlutterQuickVideoEncoder.filepath}');
+      DateTime endTime = DateTime.now();
+      Duration duration = endTime.difference(startTime);
+
+      showSnackBar('Export Success: (${duration.inMilliseconds/1000} seconds) ${FlutterQuickVideoEncoder.filepath}');
 
       await Share.shareXFiles([XFile(FlutterQuickVideoEncoder.filepath)]);
     } catch (e) {
