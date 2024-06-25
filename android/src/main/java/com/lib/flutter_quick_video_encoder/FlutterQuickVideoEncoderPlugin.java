@@ -494,7 +494,7 @@ public class FlutterQuickVideoEncoderPlugin implements
      * @param endOfStream If true, signals end-of-stream to the encoder.
      */
     private void drainEncoder(MediaCodec encoder, boolean endOfStream) {
-        final int TIMEOUT_USEC = 10000;
+        final int TIMEOUT_USEC = endOfStream ? 10000 : 0;
         if (endOfStream) {
             signalEndOfStream(encoder);
         }
