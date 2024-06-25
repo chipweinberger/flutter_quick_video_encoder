@@ -119,6 +119,8 @@ public class FlutterQuickVideoEncoderPlugin implements
                         videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
                         videoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
                         videoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+                        //videoFormat.setInteger(MediaFormat.KEY_LATENCY, 1);
+
                         
                         // Video encoder
                         mVideoEncoder = MediaCodec.createEncoderByType("video/avc");
@@ -176,7 +178,7 @@ public class FlutterQuickVideoEncoderPlugin implements
                     byte[] rawRgba = ((byte[]) call.argument("rawRgba"));
 
                     // convert to yuv420
-                    byte[] yuv420 = rgbaToYuv420Flexible(rawRgba, mWidth, mHeight);
+                    byte[] yuv420 = rgbaToYuv420Planar(rawRgba, mWidth, mHeight);
 
                     // time
                     long presentationTime = mVideoFrameIdx * 1000000L / mFps;
@@ -364,7 +366,7 @@ public class FlutterQuickVideoEncoderPlugin implements
         return null;
     }
 
-    private byte[] rgbaToYuv420Flexible(byte[] rgba, int width, int height) {
+    private byte[] rgbaToYuv420Planar(byte[] rgba, int width, int height) {
         final int frameSize = width * height;
 
         int yIndex = 0;
