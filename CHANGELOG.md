@@ -1,3 +1,6 @@
+## 1.6.0
+* **[Perf]** Android: speed up android perf about 2x
+
 ## 1.5.1
 * **[Fix]** iOS: only call `markAsFinished` when needed
 
