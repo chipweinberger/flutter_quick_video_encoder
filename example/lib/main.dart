@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:math';
@@ -152,37 +153,60 @@ class _FqveAppState extends State<FqveApp> {
 
       DateTime startTime = DateTime.now();
 
+      Completer<void> readyForMore = Completer<void>();
+      readyForMore.complete();
+
       int totalFrames = 60;
       for (int i = 0; i < totalFrames; i++) {
+        Uint8List? videoFrame;
+        Uint8List? audioFrame;
         if (mode == ExportMode.videoOnly || mode == ExportMode.videoAndAudio) {
-          Uint8List frameData = await _generateVideoFrame(i);
-          await FlutterQuickVideoEncoder.appendVideoFrame(frameData);
+          videoFrame = await _generateVideoFrame(i);
         }
         if (mode == ExportMode.audioOnly || mode == ExportMode.videoAndAudio) {
-          Uint8List audioData = _generateAudioFrame(i);
-          await FlutterQuickVideoEncoder.appendAudioFrame(audioData);
+          audioFrame = _generateAudioFrame(i);
         }
-        // hack: going too fast causes clicking noises for some reason
-        if (mode == ExportMode.audioOnly || mode == ExportMode.videoAndAudio) {
-          if (Platform.isIOS || Platform.isMacOS) {
-            await Future.delayed(Duration(milliseconds: 1));
-          }
-        }
+
+        // ensure previous _appendFrames call
+        // has completed, so we don't queue too much
+        await readyForMore.future;
+        readyForMore = Completer<void>();
+
+        // perf: append frames *without* awaiting.
+        //  this lets us start work generating the next frames
+        //  while these frames are still encoding
+        _appendFrames(videoFrame, audioFrame)
+          .then((value) => readyForMore.complete())
+          .catchError((e) => readyForMore.completeError(e));
+
         setState(() {
           progress = (i + 1) / totalFrames;
         });
       }
+
+      // ensure previous _appendFrames call has completed
+      await readyForMore.future;
 
       await FlutterQuickVideoEncoder.finish();
 
       DateTime endTime = DateTime.now();
       Duration duration = endTime.difference(startTime);
 
-      showSnackBar('Export Success: (${duration.inMilliseconds/1000} seconds) ${FlutterQuickVideoEncoder.filepath}');
+      showSnackBar('Export Success: (${duration.inMilliseconds / 1000} seconds) ${FlutterQuickVideoEncoder.filepath}');
 
       await Share.shareXFiles([XFile(FlutterQuickVideoEncoder.filepath)]);
     } catch (e) {
       showSnackBar('Error: $e');
+    }
+  }
+
+  // helper function
+  Future<void> _appendFrames(Uint8List? videoFrame, Uint8List? audioFrame) async {
+    if (videoFrame != null) await FlutterQuickVideoEncoder.appendVideoFrame(videoFrame);
+    if (audioFrame != null) await FlutterQuickVideoEncoder.appendAudioFrame(audioFrame);
+    if (audioFrame != null && (Platform.isIOS || Platform.isMacOS)) {
+      // hack: going too fast causes clicking noises for some reason
+      await Future.delayed(Duration(milliseconds: 1));
     }
   }
 
