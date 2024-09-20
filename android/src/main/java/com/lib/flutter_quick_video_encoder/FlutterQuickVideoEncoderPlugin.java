@@ -336,6 +336,10 @@ public class FlutterQuickVideoEncoderPlugin implements
         // Dequeue input buffer
         int inIdx = mVideoEncoder.dequeueInputBuffer(-1);
         if (inIdx >= 0) {
+            // Get buffer size
+            ByteBuffer buffer = mVideoEncoder.getInputBuffer(inIdx);
+            int size = buffer.capacity();
+
             // Get input image
             Image image = mVideoEncoder.getInputImage(inIdx);
 
@@ -343,11 +347,11 @@ public class FlutterQuickVideoEncoderPlugin implements
             fillImage(image, yuv420, mWidth, mHeight);
 
             // Queue input buffer
-            mVideoEncoder.queueInputBuffer(inIdx, 0, yuv420.length, presentationTime, 0);
-
-            // Increment frame index
-            mVideoFrameIdx++;
+            mVideoEncoder.queueInputBuffer(inIdx, 0, size, presentationTime, 0);
         }
+
+        // Increment frame index
+        mVideoFrameIdx++;
     }
 
     private void feedAudioEncoder(byte[] rawPcmArray) throws Exception {
@@ -358,17 +362,25 @@ public class FlutterQuickVideoEncoderPlugin implements
                 ByteBuffer buf = mAudioEncoder.getInputBuffer(inIdx);
                 buf.clear();
 
+                // Push as many bytes as the encoder allows
                 int remaining = buf.remaining();
                 int toWrite = Math.min(rawPcmArray.length - offset, remaining);
                 buf.put(rawPcmArray, offset, toWrite);
 
-                long presentationTime = mAudioFrameIdx * 1000000L / mFps;
+                // Calculate presentation time
+                long beginTime = mAudioFrameIdx * 1000000L / mFps;
+                long duration = 1000000L / mFps;
+                long presentationTime = beginTime + (duration * offset / rawPcmArray.length);
+
+                // queue
                 mAudioEncoder.queueInputBuffer(inIdx, 0, toWrite, presentationTime, 0);
 
                 offset += toWrite;
-                mAudioFrameIdx++;
             }
         }
+
+        // Increment frame index
+        mAudioFrameIdx++;
     }
 
     private boolean isColorFormatSupported(String mimeType, int desiredColorFormat) {
