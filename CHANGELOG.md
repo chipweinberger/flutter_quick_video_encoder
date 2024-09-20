@@ -1,3 +1,6 @@
+## 1.7.0
+* **[Perf]** Android: use separate encode thread to speed up another 2x
+
 ## 1.6.0
 * **[Perf]** Android: speed up android perf about 2x
 
