@@ -1,3 +1,6 @@
+## 1.7.1
+* **[Android]** undo inadvertant changes to `feedAudioEncoder` & `feedVideoEncoder` in 1.7.0
+
 ## 1.7.0
 * **[Perf]** Android: use separate encode thread to speed up another 2x
 
