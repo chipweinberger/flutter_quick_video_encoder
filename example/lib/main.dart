@@ -33,14 +33,16 @@ class FqveApp extends StatefulWidget {
 }
 
 class _FqveAppState extends State<FqveApp> {
-  double progress = 0.0;
-  static const int width = 1280;
-  static const int height = 720;
+  static const int width = 480;
+  static const int height = 854;
   static const int fps = 30;
   static const int audioChannels = 1;
   static const int sampleRate = 44100;
 
   BuildContext? _context;
+
+  double _progress = 1;
+  bool _shouldCancel = false;
 
   @override
   void initState() {
@@ -110,6 +112,12 @@ class _FqveAppState extends State<FqveApp> {
 
   Future<void> export({required ExportMode mode}) async {
     try {
+      _shouldCancel = false;
+
+      setState(() {
+        _progress = 0;
+      });
+
       Directory appDir = await getApplicationDocumentsDirectory();
 
       // setup
@@ -156,7 +164,7 @@ class _FqveAppState extends State<FqveApp> {
       Completer<void> readyForMore = Completer<void>();
       readyForMore.complete();
 
-      int totalFrames = 60;
+      int totalFrames = 24 * 60;
       for (int i = 0; i < totalFrames; i++) {
         Uint8List? videoFrame;
         Uint8List? audioFrame;
@@ -176,12 +184,19 @@ class _FqveAppState extends State<FqveApp> {
         //  this lets us start work generating the next frames
         //  while these frames are still encoding
         _appendFrames(videoFrame, audioFrame)
-          .then((value) => readyForMore.complete())
-          .catchError((e) => readyForMore.completeError(e));
+            .then((value) => readyForMore.complete())
+            .catchError((e) => readyForMore.completeError(e));
 
         setState(() {
-          progress = (i + 1) / totalFrames;
+          _progress = (i + 1) / totalFrames;
         });
+
+        if (_shouldCancel) {
+          setState(() {
+            _progress = 1;
+          });
+          return;
+        }
       }
 
       // ensure previous _appendFrames call has completed
@@ -218,6 +233,56 @@ class _FqveAppState extends State<FqveApp> {
     }
   }
 
+  Widget _buildButtons(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          ElevatedButton(
+            onPressed: () {
+              export(mode: ExportMode.videoAndAudio);
+            },
+            child: Text('Export Video & Audio'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              export(mode: ExportMode.videoOnly);
+            },
+            child: Text('Export Video Only'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              export(mode: ExportMode.audioOnly);
+            },
+            child: Text('Export Audio Only'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgress(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: LinearProgressIndicator(
+              value: _progress,
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _shouldCancel = true;
+            },
+            child: Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -232,40 +297,9 @@ class _FqveAppState extends State<FqveApp> {
                 centerTitle: true,
                 title: Text('Flutter Quick Video Encoder'),
               ),
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton(
-                      onPressed: () {
-                        export(mode: ExportMode.videoAndAudio);
-                      },
-                      child: Text('Export Video & Audio'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        export(mode: ExportMode.videoOnly);
-                      },
-                      child: Text('Export Video Only'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        export(mode: ExportMode.audioOnly);
-                      },
-                      child: Text('Export Audio Only'),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Opacity(
-                        opacity: progress > 0 ? 1 : 0,
-                        child: LinearProgressIndicator(
-                          value: progress,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              body: _progress < 1 ? 
+                _buildProgress(context) : 
+                _buildButtons(context)
             );
           }),
         ));
