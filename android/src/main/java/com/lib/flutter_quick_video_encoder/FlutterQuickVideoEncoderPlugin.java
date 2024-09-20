@@ -104,6 +104,9 @@ public class FlutterQuickVideoEncoderPlugin implements
                     videoQueue.clear();
                     audioQueue.clear();
 
+                    // reset
+                    stopProcessingThread();
+
                     // Extract parameters
                     int width =         call.argument("width");
                     int height =        call.argument("height");
@@ -274,6 +277,13 @@ public class FlutterQuickVideoEncoderPlugin implements
             String stackTrace = sw.toString();
             result.error("androidException", e.toString(), stackTrace);
             return;
+        }
+    }
+
+    private void stopProcessingThread() throws InterruptedException {
+        if (processingThread != null && processingThread.isAlive()) {
+            inputQueue.put(new InputData(InputData.DataType.STOP, null));
+            processingThread.join(); 
         }
     }
 
