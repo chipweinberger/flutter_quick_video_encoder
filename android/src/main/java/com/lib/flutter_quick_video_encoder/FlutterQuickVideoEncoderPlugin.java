@@ -11,6 +11,10 @@ import android.util.Log;
 import java.nio.ByteBuffer;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -18,6 +22,17 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
+
+class InputData {
+    enum DataType { VIDEO, AUDIO, STOP }
+    public DataType type;
+    public byte[] data;
+
+    public InputData(DataType type, byte[] data) {
+        this.type = type;
+        this.data = data;
+    }
+}
 
 class EncodedData {
     public ByteBuffer byteBuffer;
@@ -53,6 +68,14 @@ public class FlutterQuickVideoEncoderPlugin implements
     private Queue<EncodedData> videoQueue = new LinkedList<>();
     private Queue<EncodedData> audioQueue = new LinkedList<>();
 
+    // input queue for video, audio, and stop signals
+    private BlockingQueue<InputData> inputQueue = new LinkedBlockingQueue<>(5);
+
+    // signal encoding success or error
+    private CompletableFuture<Void> processingResult;
+
+    private Thread processingThread;
+
     @Override
     public void onAttachedToEngine(FlutterPluginBinding binding) {
         BinaryMessenger messenger = binding.getBinaryMessenger();
@@ -76,6 +99,11 @@ public class FlutterQuickVideoEncoderPlugin implements
                 }
                 case "setup":
                 {
+                    // Clear queues
+                    inputQueue.clear();
+                    videoQueue.clear();
+                    audioQueue.clear();
+
                     // Extract parameters
                     int width =         call.argument("width");
                     int height =        call.argument("height");
@@ -168,6 +196,9 @@ public class FlutterQuickVideoEncoderPlugin implements
                         }
                     }
 
+                    // Start thread
+                    startProcessingThread();
+
                     // success
                     result.success(null);
 
@@ -175,120 +206,61 @@ public class FlutterQuickVideoEncoderPlugin implements
                 }
                 case "appendVideoFrame":
                 {
-                    byte[] rawRgba = ((byte[]) call.argument("rawRgba"));
-
-                    // convert to yuv420
-                    byte[] yuv420 = rgbaToYuv420Planar(rawRgba, mWidth, mHeight);
-
-                    // time
-                    long presentationTime = mVideoFrameIdx * 1000000L / mFps;
-
-                    // feed encoder
-                    int inIdx = mVideoEncoder.dequeueInputBuffer(-1);
-                    if (inIdx >= 0) {
-                        // get buffer size
-                        ByteBuffer buffer = mVideoEncoder.getInputBuffer(inIdx);
-                        int size = buffer.capacity();
-
-                        // fill image
-                        Image image = mVideoEncoder.getInputImage(inIdx);
-                        fillImage(image, yuv420, mWidth, mHeight);
-
-                        // queue buffer
-                        mVideoEncoder.queueInputBuffer(inIdx, 0, size, presentationTime, 0);
+                    // if processing error, throw exception
+                    if (processingResult.isDone()) {
+                        processingResult.get();
                     }
 
-                    // drain encoder & feed muxer
-                    drainEncoder(mVideoEncoder, false);
+                    byte[] rawRgba = call.argument("rawRgba");
 
-                    // increment
-                    mVideoFrameIdx++;
+                    // Convert RGBA to YUV420
+                    // Perf: we get better results doing this here on the Platform thread,
+                    // as opposed to doing it in the processing thread.
+                    byte[] yuv420 = rgbaToYuv420Planar(rawRgba, mWidth, mHeight);
 
-                    // success
+                    // Create InputData
+                    InputData inputData = new InputData(InputData.DataType.VIDEO, yuv420);
+
+                    // Put InputData into inputQueue (blocks if full)
+                    inputQueue.put(inputData);
+
+                    // Return immediately
                     result.success(null);
-
                     break;
                 }
                 case "appendAudioFrame":
                 {
-                    byte[] rawPcmArray = ((byte[]) call.argument("rawPcm"));
-                    ByteBuffer rawPcm  = ByteBuffer.wrap(rawPcmArray);
-
-                    // feed encoder
-                    int offset = 0;
-                    while (offset < rawPcmArray.length) {
-                        int inIdx = mAudioEncoder.dequeueInputBuffer(-1);
-                        if (inIdx >= 0) {
-                            ByteBuffer buf = mAudioEncoder.getInputBuffer(inIdx);
-                            buf.clear();
-
-                            // push as many bytes as the encoder allows
-                            int remaining = buf.remaining();
-                            int toWrite = Math.min(rawPcmArray.length - offset, remaining);
-                            buf.put(rawPcmArray, offset, toWrite);
-
-                            // time
-                            long beginTime = mAudioFrameIdx * 1000000L / mFps;
-                            long duration = 1000000L / mFps;
-                            long presentationTime = beginTime + (duration * offset / rawPcmArray.length);
-
-                            // queue
-                            mAudioEncoder.queueInputBuffer(inIdx, 0, toWrite, presentationTime, 0);
-
-                            offset += toWrite; 
-                        }
+                    // if processing error, throw exception
+                    if (processingResult.isDone()) {
+                        processingResult.get();
                     }
 
-                    // drain encoder & feed muxer
-                    drainEncoder(mAudioEncoder, false);
+                    byte[] rawPcmArray = call.argument("rawPcm");
 
-                    // increment
-                    mAudioFrameIdx++;
+                    // Create InputData
+                    InputData inputData = new InputData(InputData.DataType.AUDIO, rawPcmArray);
 
+                    // Put InputData into inputQueue (blocks if full)
+                    inputQueue.put(inputData);
+
+                    // Return immediately
                     result.success(null);
                     break;
                 }
-
                 case "finish":
                 {
-                    // wait for encoding
-                    if (mVideoEncoder != null) {
-                        Log.i(TAG, "calling drainEncoder(mVideoEncoder, true)");
-                        drainEncoder(mVideoEncoder, true);
+                    // if processing error, throw exception
+                    if (processingResult.isDone()) {
+                        processingResult.get();
                     }
 
-                    // wait for encoding
-                    if (mAudioEncoder != null) {
-                        Log.i(TAG, "calling drainEncoder(mAudioEncoder, true)");
-                        drainEncoder(mAudioEncoder, true);
-                    }
+                    // Send STOP signal
+                    inputQueue.put(new InputData(InputData.DataType.STOP, null));
 
-                    // flush video encoder
-                    if (mVideoEncoder != null) {
-                        Log.i(TAG, "calling mVideoEncoder.stop()");
-                        mVideoEncoder.stop();
-                        mVideoEncoder.release();
-                        mVideoEncoder = null;
-                    }
-
-                    // flush audio encoder
-                    if (mAudioEncoder != null) {
-                        Log.i(TAG, "calling mAudioEncoder.stop()");
-                        mAudioEncoder.stop();
-                        mAudioEncoder.release();
-                        mAudioEncoder = null;
-                    }
-
-                    // close muxer
-                    if (mMediaMuxer != null) {
-                        Log.i(TAG, "calling mMediaMuxer.stop())");
-                        mMediaMuxer.stop();
-                        mMediaMuxer.release();
-                        mMediaMuxer = null; 
-                    }
+                    // Wait for processingResult to complete
+                    processingResult.get();
 
                     result.success(null);
-
                     break;
                 }
                 default:
@@ -302,6 +274,100 @@ public class FlutterQuickVideoEncoderPlugin implements
             String stackTrace = sw.toString();
             result.error("androidException", e.toString(), stackTrace);
             return;
+        }
+    }
+
+    private void startProcessingThread() {
+        processingResult = new CompletableFuture<>();
+        processingThread = new Thread(() -> {
+            try {
+                while (true) {
+                    InputData inputData = inputQueue.take(); // Blocks if queue is empty
+                    if (inputData.type == InputData.DataType.STOP) {
+                        // Finish processing
+                        break;
+                    } else if (inputData.type == InputData.DataType.VIDEO) {
+                        byte[] yuv420 = inputData.data;
+                        feedVideoEncoder(yuv420);
+                        drainEncoder(mVideoEncoder, false);
+                    } else if (inputData.type == InputData.DataType.AUDIO) {
+                        byte[] rawPcmArray = inputData.data;
+                        feedAudioEncoder(rawPcmArray);
+                        drainEncoder(mAudioEncoder, false);
+                    }
+                }
+                // Finalize encoders
+                if (mVideoEncoder != null) {
+                    drainEncoder(mVideoEncoder, true);
+                    mVideoEncoder.stop();
+                    mVideoEncoder.release();
+                    mVideoEncoder = null;
+                }
+                if (mAudioEncoder != null) {
+                    drainEncoder(mAudioEncoder, true);
+                    mAudioEncoder.stop();
+                    mAudioEncoder.release();
+                    mAudioEncoder = null;
+                }
+                if (mMediaMuxer != null) {
+                    if (mMuxerStarted) {
+                        mMediaMuxer.stop();
+                    }
+                    mMediaMuxer.release();
+                    mMediaMuxer = null;
+                }
+
+                // Complete successfully
+                processingResult.complete(null);
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error in processing thread", e);
+                processingResult.completeExceptionally(e);
+                inputQueue.clear();  // release input threads
+            }
+        });
+        processingThread.start();
+    }
+
+    private void feedVideoEncoder(byte[] yuv420) throws Exception {
+        // Calculate presentation time
+        long presentationTime = mVideoFrameIdx * 1000000L / mFps;
+
+        // Dequeue input buffer
+        int inIdx = mVideoEncoder.dequeueInputBuffer(-1);
+        if (inIdx >= 0) {
+            // Get input image
+            Image image = mVideoEncoder.getInputImage(inIdx);
+
+            // Fill image with YUV data
+            fillImage(image, yuv420, mWidth, mHeight);
+
+            // Queue input buffer
+            mVideoEncoder.queueInputBuffer(inIdx, 0, yuv420.length, presentationTime, 0);
+
+            // Increment frame index
+            mVideoFrameIdx++;
+        }
+    }
+
+    private void feedAudioEncoder(byte[] rawPcmArray) throws Exception {
+        int offset = 0;
+        while (offset < rawPcmArray.length) {
+            int inIdx = mAudioEncoder.dequeueInputBuffer(-1);
+            if (inIdx >= 0) {
+                ByteBuffer buf = mAudioEncoder.getInputBuffer(inIdx);
+                buf.clear();
+
+                int remaining = buf.remaining();
+                int toWrite = Math.min(rawPcmArray.length - offset, remaining);
+                buf.put(rawPcmArray, offset, toWrite);
+
+                long presentationTime = mAudioFrameIdx * 1000000L / mFps;
+                mAudioEncoder.queueInputBuffer(inIdx, 0, toWrite, presentationTime, 0);
+
+                offset += toWrite;
+                mAudioFrameIdx++;
+            }
         }
     }
 
